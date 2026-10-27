@@ -21,6 +21,7 @@ export type Post = {
   downvotes: number;
   createdAt: string;
   comments: Comment[];
+  image?: string | null;
 };
 
 export type Database = {
@@ -53,6 +54,7 @@ export type PublicPost = {
   net: number;
   isConcept: boolean;
   myVote: 1 | -1 | 0;
+  image: string | null;
 };
 
 export type Summary = {

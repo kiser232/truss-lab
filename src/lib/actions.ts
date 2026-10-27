@@ -11,6 +11,7 @@ import {
   deletePost,
   updatePost,
 } from "@/lib/store";
+import { MAX_IMAGE_BYTES, sniffImage, type ImageChange } from "@/lib/images";
 import {
   isMessage,
   parseCategory,
@@ -43,13 +44,33 @@ function readWriteFields(formData: FormData) {
   return { author, password, title, content, category };
 }
 
+async function readImageChange(formData: FormData): Promise<ImageChange | { message: string }> {
+  const entry = formData.get("image");
+  const remove = formData.get("removeImage") === "1";
+  if (!(entry instanceof File) || entry.size === 0) {
+    return remove ? { kind: "clear" } : { kind: "keep" };
+  }
+  if (entry.size > MAX_IMAGE_BYTES) {
+    return { message: "이미지는 5MB 이하만 올릴 수 있습니다." };
+  }
+  const bytes = Buffer.from(await entry.arrayBuffer());
+  if (bytes.length > MAX_IMAGE_BYTES) {
+    return { message: "이미지는 5MB 이하만 올릴 수 있습니다." };
+  }
+  const ext = sniffImage(bytes);
+  if (!ext) return { message: "jpg, png, gif, webp 파일만 올릴 수 있습니다." };
+  return { kind: "replace", bytes, ext };
+}
+
 export async function createPostAction(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
   const fields = readWriteFields(formData);
   if (isMessage(fields)) return fields;
-  const id = await createPost(fields);
+  const image = await readImageChange(formData);
+  if (isMessage(image)) return image;
+  const id = await createPost({ ...fields, image });
   revalidatePath("/");
   redirect(`/post/${id}`);
 }
@@ -62,7 +83,9 @@ export async function updatePostAction(
   if (!Number.isInteger(id)) return { message: "글을 찾을 수 없습니다." };
   const fields = readWriteFields(formData);
   if (isMessage(fields)) return fields;
-  const result = await updatePost(id, fields);
+  const image = await readImageChange(formData);
+  if (isMessage(image)) return image;
+  const result = await updatePost(id, { ...fields, image });
   if (!result.ok) return { message: result.message };
   refreshPost(id);
   redirect(`/post/${id}`);

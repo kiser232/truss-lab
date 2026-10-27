@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ImageMark } from "@/components/image-mark";
 import { EXAM } from "@/lib/constants";
 import { examLabel } from "@/lib/time";
 import type { PublicPost, Summary } from "@/lib/types";
@@ -33,7 +34,10 @@ export function BoardSidebar({ summary, best }: { summary: Summary; best: Public
               <li key={post.id} className="flex gap-2 text-sm">
                 <span className="w-4 shrink-0 font-semibold text-[#1f6b4a]">{index + 1}</span>
                 <Link href={`/post/${post.id}`} className="min-w-0 text-[#1a4f86] hover:underline">
-                  <span className="line-clamp-2">{post.title}</span>
+                  <span className="line-clamp-2">
+                    {post.title}
+                    {post.image ? <ImageMark /> : null}
+                  </span>
                   <span className="mt-0.5 block text-[11px] text-[#8b97a3]">
                     추천 {post.upvotes} · 조회 {post.views}
                   </span>

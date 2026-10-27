@@ -42,3 +42,4 @@ next-env.d.ts
 
 # board writes
 data/*.tmp
+data/uploads/

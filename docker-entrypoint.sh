@@ -1,6 +1,6 @@
 #!/bin/sh
 set -eu
-mkdir -p /app/data
+mkdir -p /app/data/uploads
 if [ ! -f /app/data/board.json ]; then
   cp /app/seed/board.json /app/data/board.json
 fi

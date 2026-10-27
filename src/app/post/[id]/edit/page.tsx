@@ -37,6 +37,7 @@ export default async function EditPage({ params }: EditPageProps) {
           category,
           title: post.title,
           content: post.content,
+          image: post.image,
         }}
       />
     </section>

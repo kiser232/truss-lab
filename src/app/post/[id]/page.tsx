@@ -56,6 +56,19 @@ export default async function PostPage({ params }: PostPageProps) {
       </header>
       <div className="rounded-md border border-[#d3dde4] bg-white px-4 py-6 sm:px-6">
         <p className="whitespace-pre-wrap text-[15px] leading-7 text-[#243140]">{post.content}</p>
+        {post.image ? (
+          <figure className="mt-5">
+            <a href={post.image} target="_blank" rel="noopener noreferrer">
+              {/* Uploads keep their original size and animation, so this is a plain image. */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={post.image}
+                alt={`${post.title} 첨부 이미지`}
+                className="max-h-[36rem] w-auto max-w-full rounded-md border border-[#e6edf2] bg-[#f6f8fa]"
+              />
+            </a>
+          </figure>
+        ) : null}
       </div>
       <div className="rounded-md border border-[#d3dde4] bg-white px-4 py-4 sm:px-6">
         {post.isNotice ? (

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { isSafeImageName, sniffImage } from "./images";
 import { hashPassword, verifyPassword } from "./password";
 import { queryPosts } from "./query";
 import { examLabel, examOffset } from "./time";
@@ -20,9 +21,29 @@ function post(partial: Partial<PublicPost> & Pick<PublicPost, "id" | "title">): 
     net: 0,
     isConcept: false,
     myVote: 0,
+    image: null,
     ...partial,
   };
 }
+
+test("image sniff accepts photo signatures and rejects other bytes", () => {
+  const png = Uint8Array.from([
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0, 0x49, 0x45, 0x4e, 0x44,
+  ]);
+  const jpeg = Uint8Array.from([0xff, 0xd8, 0xff, 0xe0, 0, 0, 0, 0, 0, 0, 0, 0]);
+  const gif = Uint8Array.from([0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0, 0, 0, 0, 0, 0]);
+  const webp = Uint8Array.from([
+    0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x45, 0x42, 0x50,
+  ]);
+  assert.equal(sniffImage(png), "png");
+  assert.equal(sniffImage(jpeg), "jpg");
+  assert.equal(sniffImage(gif), "gif");
+  assert.equal(sniffImage(webp), "webp");
+  assert.equal(sniffImage(Uint8Array.from([0x3c, 0x73, 0x76, 0x67, 0, 0, 0, 0, 0, 0, 0, 0])), null);
+  assert.equal(isSafeImageName("a".repeat(32) + ".png"), true);
+  assert.equal(isSafeImageName("../board.json"), false);
+  assert.equal(isSafeImageName(`${"a".repeat(32)}.svg`), false);
+});
 
 test("password round trip accepts the same secret and rejects another", () => {
   const stored = hashPassword("wonjun");

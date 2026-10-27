@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { CategoryBadge } from "@/components/category-badge";
+import { ImageMark } from "@/components/image-mark";
 import type { Tab } from "@/lib/query";
 import { formatListDate, isFresh } from "@/lib/time";
 import type { PublicPost } from "@/lib/types";
@@ -22,6 +23,7 @@ function TitleLink({ post, now }: { post: PublicPost; now: Date }) {
           [{post.comments.length}]
         </span>
       ) : null}
+      {post.image ? <ImageMark /> : null}
       {fresh ? (
         <span className="ml-1 align-text-top text-[10px] font-bold text-[#e25b16]">N</span>
       ) : null}
