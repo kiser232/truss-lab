@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
 import { cookies } from "next/headers";
+import { MissingPost } from "@/components/missing-post";
 import { CategoryBadge } from "@/components/category-badge";
 import { CommentSection } from "@/components/comment-section";
 import { DeletePostForm } from "@/components/delete-post-form";
@@ -34,7 +34,7 @@ export async function generateMetadata({ params }: PostPageProps): Promise<Metad
 export default async function PostPage({ params }: PostPageProps) {
   const { id } = await params;
   const post = await loadPost(id, true);
-  if (!post) notFound();
+  if (!post) return <MissingPost />;
 
   return (
     <article className="mx-auto max-w-3xl space-y-3">

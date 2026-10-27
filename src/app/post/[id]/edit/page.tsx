@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { MissingPost } from "@/components/missing-post";
 import { PostForm } from "@/components/post-form";
 import type { UserCategory } from "@/lib/constants";
 import { CATEGORIES } from "@/lib/constants";
@@ -16,9 +16,9 @@ export const metadata: Metadata = {
 export default async function EditPage({ params }: EditPageProps) {
   const { id } = await params;
   const numericId = Number(id);
-  if (!Number.isInteger(numericId) || numericId < 1) notFound();
+  if (!Number.isInteger(numericId) || numericId < 1) return <MissingPost />;
   const post = await getPost(numericId);
-  if (!post || post.isNotice) notFound();
+  if (!post || post.isNotice) return <MissingPost />;
   const category = (CATEGORIES as readonly string[]).includes(post.category)
     ? (post.category as UserCategory)
     : "응원";

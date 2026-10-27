@@ -36,13 +36,13 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html lang="ko" className={`${noto.variable} ${blackHan.variable} h-full antialiased`}>
       <body className="min-h-full bg-[#e4ebf0] font-sans text-[#1c2430]">
         <a
-          href="#content"
+          href="#main"
           className="absolute left-3 top-2 z-50 -translate-y-16 rounded bg-white px-3 py-1 text-sm text-[#14372c] focus:translate-y-0"
         >
           본문으로
         </a>
         <SiteHeader />
-        <div id="content" className="mx-auto w-full max-w-[1100px] px-3 py-4">
+        <div id="main" className="mx-auto w-full max-w-[1100px] px-3 py-4">
           {children}
         </div>
         <SiteFooter />
