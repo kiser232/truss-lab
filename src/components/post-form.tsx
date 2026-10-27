@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
@@ -38,8 +37,6 @@ export function PostForm({
 }) {
   const action = mode === "create" ? createPostAction : updatePostAction;
   const [state, formAction] = useActionState(action, null as FormState);
-  const [title, setTitle] = useState(initial?.title ?? "");
-  const [content, setContent] = useState(initial?.content ?? "");
 
   return (
     <form action={formAction} className="space-y-4">
@@ -92,32 +89,24 @@ export function PostForm({
         </div>
       </div>
       <div className="space-y-1.5">
-        <div className="flex items-center justify-between">
-          <Label htmlFor="title">제목</Label>
-          <span className="text-xs text-[#8b97a3]">{title.length}/80</span>
-        </div>
+        <Label htmlFor="title">제목</Label>
         <Input
           id="title"
           name="title"
           required
           maxLength={80}
-          value={title}
-          onChange={(event) => setTitle(event.target.value)}
+          defaultValue={initial?.title}
           placeholder="제목을 입력해 주세요"
         />
       </div>
       <div className="space-y-1.5">
-        <div className="flex items-center justify-between">
-          <Label htmlFor="content">내용</Label>
-          <span className="text-xs text-[#8b97a3]">{content.length}/5000</span>
-        </div>
+        <Label htmlFor="content">내용</Label>
         <Textarea
           id="content"
           name="content"
           required
           maxLength={5000}
-          value={content}
-          onChange={(event) => setContent(event.target.value)}
+          defaultValue={initial?.content}
           rows={12}
           placeholder="응원이나 막판 정보를 적어 주세요. 개인정보와 비방은 빼 주세요."
           className="min-h-56 bg-white text-sm leading-6"
