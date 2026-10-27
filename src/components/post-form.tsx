@@ -60,7 +60,6 @@ export function PostForm({
       return;
     }
     if (file.size > MAX_IMAGE_BYTES) {
-      event.target.value = "";
       setPreview(null);
       setLocalMessage("이미지는 5MB 이하만 올릴 수 있습니다.");
       return;
@@ -80,11 +79,17 @@ export function PostForm({
     }
   }
 
+  function clearPreview() {
+    if (previewRef.current) URL.revokeObjectURL(previewRef.current);
+    previewRef.current = null;
+    setPreview(null);
+  }
+
   const message = localMessage ?? state?.message;
   const shownImage = preview ?? initial?.image ?? null;
 
   return (
-    <form action={formAction} encType="multipart/form-data" className="space-y-4" onSubmit={onSubmit}>
+    <form action={formAction} className="space-y-4" onSubmit={onSubmit} onReset={clearPreview}>
       {mode === "edit" ? <input type="hidden" name="postId" value={postId} /> : null}
       {message ? (
         <p role="alert" className="rounded-md bg-[#fff1f0] px-3 py-2 text-sm text-[#c5362b]">
