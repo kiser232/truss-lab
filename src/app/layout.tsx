@@ -1,8 +1,6 @@
 import type { Metadata } from "next";
-import { Black_Han_Sans, Noto_Sans_KR } from "next/font/google";
-import { SiteFooter } from "@/components/site-footer";
-import { SiteHeader } from "@/components/site-header";
-import { GALLERY_NAME } from "@/lib/constants";
+import type { ReactNode } from "react";
+import { Fraunces, IBM_Plex_Mono, Noto_Sans_KR } from "next/font/google";
 import "./globals.css";
 
 const noto = Noto_Sans_KR({
@@ -12,41 +10,29 @@ const noto = Noto_Sans_KR({
   display: "swap",
 });
 
-const blackHan = Black_Han_Sans({
-  weight: "400",
+const fraunces = Fraunces({
   subsets: ["latin"],
-  variable: "--font-black-han",
+  variable: "--font-fraunces",
+  display: "swap",
+});
+
+const mono = IBM_Plex_Mono({
+  weight: ["400", "500"],
+  subsets: ["latin"],
+  variable: "--font-mono",
   display: "swap",
 });
 
 export const metadata: Metadata = {
-  title: {
-    default: GALLERY_NAME,
-    template: `%s · ${GALLERY_NAME}`,
-  },
-  description:
-    "2027학년도 수능을 앞둔 장원준을 응원하는 게시판. 응원, 막판 정보, 질문과 후기를 올립니다.",
-  applicationName: GALLERY_NAME,
+  title: "트러스 실습실",
+  description: "건축공학과 학생을 위한 트러스 계산기, 실습, 퀴즈. 절점법으로 축력을 읽고 재료의 인장·압축을 구분합니다.",
+  applicationName: "트러스 실습실",
 };
 
-export const dynamic = "force-dynamic";
-
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="ko" className={`${noto.variable} ${blackHan.variable} h-full antialiased`}>
-      <body className="min-h-full bg-[#e4ebf0] font-sans text-[#1c2430]">
-        <a
-          href="#main"
-          className="absolute left-3 top-2 z-50 -translate-y-16 rounded bg-white px-3 py-1 text-sm text-[#14372c] focus:translate-y-0"
-        >
-          본문으로
-        </a>
-        <SiteHeader />
-        <div id="main" className="mx-auto w-full max-w-[1100px] px-3 py-4">
-          {children}
-        </div>
-        <SiteFooter />
-      </body>
+    <html lang="ko" className={`${noto.variable} ${fraunces.variable} ${mono.variable}`}>
+      <body>{children}</body>
     </html>
   );
 }

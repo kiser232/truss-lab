@@ -1,13 +1,14 @@
 {
-  "name": "wonjun-csat-gallery",
-  "version": "0.1.0",
+  "name": "truss-lab",
+  "version": "1.0.0",
   "private": true,
+  "description": "건축공학과 학생을 위한 트러스 계산기, 실습, 퀴즈",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
+    "start": "npx serve out -l tcp://0.0.0.0:43123",
     "lint": "eslint",
-    "test": "tsx --test src/lib/board.test.ts"
+    "test": "tsx --test src/lib/truss/solver.test.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",
