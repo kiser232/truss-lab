@@ -1,6 +1,7 @@
 "use client";
 
-import { BOARD_H, BOARD_W } from "./grid";
+import { VALLEY_LEFT, VALLEY_RIGHT } from "@/lib/truss/stages";
+import { BOARD_H, BOARD_W, toScreen } from "./grid";
 
 export type SceneId = "valley" | "road" | "cliff" | "workshop" | "paper";
 
@@ -73,18 +74,31 @@ export function SceneBackdrop({ scene, uid }: { scene: SceneId; uid: string }) {
 }
 
 function Valley({ uid }: { uid: string }) {
+  const left = toScreen(VALLEY_LEFT, 0);
+  const right = toScreen(VALLEY_RIGHT, 0);
+  const ground = left.sy;
+  const lipL = left.sx + 36;
+  const lipR = right.sx - 36;
   return (
     <g>
       <rect width={BOARD_W} height={BOARD_H} fill={`url(#sky-${uid})`} />
       <circle cx="660" cy="78" r="28" fill="#fff6d2" />
       <path d="M0 250 C120 190 220 230 340 190 C470 146 580 210 784 160 L784 360 C560 330 360 390 180 340 C70 310 0 330 0 330 Z" fill="#d7e4c9" />
       <path d="M0 330 C150 280 280 350 460 300 C620 258 700 310 784 270 L784 450 C500 430 240 470 0 410 Z" fill="#c3d4ad" />
-      <path d="M0 468 L118 468 C150 468 162 498 172 546 L0 546 Z" fill="#7d9a60" />
-      <path d="M784 468 L666 468 C634 468 622 498 612 546 L784 546 Z" fill="#719456" />
-      <path d="M150 524 C230 496 330 546 430 512 C510 486 580 530 650 508 L640 546 L168 546 Z" fill="#6ea4b8" />
-      <path d="M210 530 C300 516 400 540 520 522" fill="none" stroke="rgba(255,255,255,0.55)" strokeWidth="2" />
-      <circle cx="96" cy="500" r="7" fill="#8a8174" />
-      <circle cx="700" cy="492" r="5" fill="#9a9084" />
+      <path d={`M0 ${ground - 36} L${lipL - 8} ${ground - 36} L${lipL - 8} ${ground} L${lipL + 22} ${BOARD_H} L0 ${BOARD_H} Z`} fill="#7d9a60" />
+      <path d={`M${BOARD_W} ${ground - 36} L${lipR + 8} ${ground - 36} L${lipR + 8} ${ground} L${lipR - 22} ${BOARD_H} L${BOARD_W} ${BOARD_H} Z`} fill="#719456" />
+      <path
+        d={`M${lipL + 8} ${ground + 28} C${(lipL + lipR) / 2 - 70} ${ground + 8} ${(lipL + lipR) / 2 + 70} ${ground + 46} ${lipR - 8} ${ground + 18} L${lipR - 16} ${BOARD_H} L${lipL + 16} ${BOARD_H} Z`}
+        fill="#6ea4b8"
+      />
+      <path
+        d={`M${lipL + 40} ${ground + 36} Q${(left.sx + right.sx) / 2} ${ground + 22} ${lipR - 40} ${ground + 36}`}
+        fill="none"
+        stroke="rgba(255,255,255,0.55)"
+        strokeWidth="2"
+      />
+      <circle cx={left.sx - 52} cy={ground - 4} r="7" fill="#8a8174" />
+      <circle cx={right.sx + 48} cy={ground - 8} r="5" fill="#9a9084" />
     </g>
   );
 }

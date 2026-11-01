@@ -17,6 +17,10 @@ export type Stage = {
   car: { road: number[]; weight: number; samples: number } | null;
 };
 
+/** 계곡 배경의 왼쪽·오른쪽 언덕이 만나는 교대. 그림과 초기 절점이 이 좌표를 함께 쓴다. */
+export const VALLEY_LEFT = 2;
+export const VALLEY_RIGHT = 10;
+
 export const STAGES: Stage[] = [
   {
     id: 1,
@@ -24,13 +28,13 @@ export const STAGES: Stage[] = [
     kicker: "1단계 · 삼각형",
     budget: 88,
     story:
-      "폭 6m 계곡입니다. 왼쪽은 핀, 오른쪽은 수직 롤러이고, 한가운데 절점 위로 60N 돌이 떨어집니다. 세 절점은 이미 놓여 있습니다.",
+      "폭 8m 계곡입니다. 왼쪽 언덕 끝은 핀, 오른쪽 언덕 끝은 수직 롤러이고, 골짜기 한가운데 절점 위로 60N 돌이 떨어집니다. 세 절점은 그림의 언덕과 골짜기에 이미 놓여 있습니다.",
     objective: "돌이 부재를 부러뜨리지 않게, 예산 88 안에서 트러스를 완성하세요.",
     hint: "밑의 세 점이 한 직선이면 삼각형이 없어 무너집니다. 위로 꼭짓점을 올리세요. 가운데 수직재는 인장(케이블·철근), 빗재는 압축(나무·콘크리트)인 경우가 많습니다. 높이를 키우면 빗재 압축이 줄어들지만 길이가 늘어 비용도 늘어납니다.",
     nodes: [
-      { id: 1, x: 0, y: 0 },
-      { id: 2, x: 6, y: 0 },
-      { id: 3, x: 3, y: 0 },
+      { id: 1, x: VALLEY_LEFT, y: 0 },
+      { id: 2, x: VALLEY_RIGHT, y: 0 },
+      { id: 3, x: (VALLEY_LEFT + VALLEY_RIGHT) / 2, y: 0 },
     ],
     fixedNodeIds: [1, 2, 3],
     supports: [
@@ -45,14 +49,14 @@ export const STAGES: Stage[] = [
     title: "두 곳의 돌",
     kicker: "2단계 · 두 절점",
     budget: 150,
-    story: "같은 계곡이 8m로 넓어졌습니다. 왼쪽에서 2m, 6m 지점에 55N 돌이 하나씩 떨어집니다.",
+    story: "같은 8m 계곡입니다. 왼쪽 언덕에서 2m, 6m, 골짜기 위에 55N 돌이 하나씩 떨어집니다.",
     objective: "두 하중을 동시에 견디세요. 예산은 150입니다.",
     hint: "하중 절점마다 위를 향한 삼각형을 만들고, 위쪽을 잇는 상현재가 필요합니다. 수직재는 대개 인장, 바깥 빗재는 압축입니다. 식의 개수가 모자라면(m + r < 2j) 계산 전에 무너집니다.",
     nodes: [
-      { id: 1, x: 0, y: 0 },
-      { id: 2, x: 8, y: 0 },
-      { id: 3, x: 2, y: 0 },
-      { id: 4, x: 6, y: 0 },
+      { id: 1, x: VALLEY_LEFT, y: 0 },
+      { id: 2, x: VALLEY_RIGHT, y: 0 },
+      { id: 3, x: VALLEY_LEFT + 2, y: 0 },
+      { id: 4, x: VALLEY_LEFT + 6, y: 0 },
     ],
     fixedNodeIds: [1, 2, 3, 4],
     supports: [
@@ -74,10 +78,10 @@ export const STAGES: Stage[] = [
     objective: "큰 하중 쪽 압축재가 먼저 항복하지 않게 재료를 나누세요. 예산 150.",
     hint: "왼쪽 빗재의 압축이 오른쪽보다 큽니다. 왼쪽만 콘크리트나 강관으로 올리고, 인장이 확실한 하단 현재는 케이블이 쌉니다. 전체를 강관으로 하면 예산을 넘기기 쉽습니다.",
     nodes: [
-      { id: 1, x: 0, y: 0 },
-      { id: 2, x: 8, y: 0 },
-      { id: 3, x: 2, y: 0 },
-      { id: 4, x: 6, y: 0 },
+      { id: 1, x: VALLEY_LEFT, y: 0 },
+      { id: 2, x: VALLEY_RIGHT, y: 0 },
+      { id: 3, x: VALLEY_LEFT + 2, y: 0 },
+      { id: 4, x: VALLEY_LEFT + 6, y: 0 },
     ],
     fixedNodeIds: [1, 2, 3, 4],
     supports: [
@@ -140,13 +144,13 @@ export const STAGES: Stage[] = [
     title: "케이블을 가려 쓰라",
     kicker: "6단계 · 재료 배치",
     budget: 120,
-    story: "8m 다리 한가운데에 100N 돌이 있습니다. 강관만 쓰면 예산이 터지고, 케이블만 쓰면 압축 부재가 풀립니다.",
+    story: "8m 계곡 한가운데, 골짜기 위 절점에 100N 돌이 있습니다. 강관만 쓰면 예산이 터지고, 케이블만 쓰면 압축 부재가 풀립니다.",
     objective: "인장 부재와 압축 부재를 구분해서 가장 싼 안전한 재료를 고르세요. 예산 120.",
     hint: "가운데 수직재와 하현재는 인장인 경우가 많고, 상현재와 빗재는 압축인 경우가 많습니다. 시험 뒤 해설의 부호를 보고 재료를 바꿔 다시 시험해 보세요. 절점법 순서: 반력 → 미지부재가 2개 이하인 절점.",
     nodes: [
-      { id: 1, x: 0, y: 0 },
-      { id: 2, x: 8, y: 0 },
-      { id: 3, x: 4, y: 0 },
+      { id: 1, x: VALLEY_LEFT, y: 0 },
+      { id: 2, x: VALLEY_RIGHT, y: 0 },
+      { id: 3, x: (VALLEY_LEFT + VALLEY_RIGHT) / 2, y: 0 },
     ],
     fixedNodeIds: [1, 2, 3],
     supports: [

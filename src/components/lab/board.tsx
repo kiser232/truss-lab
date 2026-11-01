@@ -10,8 +10,16 @@ import { SceneBackdrop, type SceneId } from "./scenes";
 export type BoardPick = {
   nodeId: number | null;
   memberId: number | null;
+  supportNodeId: number | null;
+  weightId: number | null;
   grid: { x: number; y: number } | null;
 };
+
+export type BoardSelection =
+  | { kind: "node"; id: number }
+  | { kind: "member"; id: number }
+  | { kind: "support"; id: number }
+  | { kind: "weight"; id: number };
 
 export type BoardWeight = {
   id: number;
@@ -36,9 +44,9 @@ type Props = {
   showStones?: boolean;
   showGrid?: boolean;
   scene?: SceneId;
+  selected?: BoardSelection | null;
   onPick?: (pick: BoardPick) => void;
   onHoverMember?: (memberId: number | null, point: { x: number; y: number } | null) => void;
-  onRemoveWeight?: (id: number) => void;
 };
 
 export function Board(props: Props) {
@@ -48,7 +56,7 @@ export function Board(props: Props) {
   const loose = props.analysis?.status === "unstable";
   const wall = props.supports.some((support) => support.type === "rollerX");
 
-  function locate(event: React.PointerEvent<SVGSVGElement>): { x: number; y: number } | null {
+  function localPoint(event: React.PointerEvent<SVGSVGElement>): { x: number; y: number } | null {
     const svg = event.currentTarget;
     const point = svg.createSVGPoint();
     point.x = event.clientX;
@@ -56,10 +64,34 @@ export function Board(props: Props) {
     const matrix = svg.getScreenCTM();
     if (!matrix) return null;
     const local = point.matrixTransform(matrix.inverse());
-    return fromScreen(local.x, local.y);
+    return { x: local.x, y: local.y };
   }
 
-  function identify(structural: { x: number; y: number }): BoardPick {
+  function identify(local: { x: number; y: number }): BoardPick {
+    const structural = fromScreen(local.x, local.y);
+    let weightId: number | null = null;
+    const weights = props.weights ?? [];
+    for (const weight of weights) {
+      const node = props.nodes.find((item) => item.id === weight.nodeId);
+      if (!node) continue;
+      const screen = toScreen(node.x, node.y);
+      const stack = weights.filter((item) => item.nodeId === weight.nodeId).findIndex((item) => item.id === weight.id);
+      const top = screen.sy - 30 - Math.max(0, stack) * 18;
+      if (local.x >= screen.sx - 16 && local.x <= screen.sx + 16 && local.y >= top && local.y <= top + 16) weightId = weight.id;
+    }
+    let supportNodeId: number | null = null;
+    if (weightId === null) {
+      for (const support of props.supports) {
+        const node = props.nodes.find((item) => item.id === support.nodeId);
+        if (!node) continue;
+        const screen = toScreen(node.x, node.y);
+        const hit =
+          support.type === "rollerX"
+            ? local.x >= screen.sx - 32 && local.x <= screen.sx - 2 && local.y >= screen.sy - 14 && local.y <= screen.sy + 14
+            : local.x >= screen.sx - 18 && local.x <= screen.sx + 18 && local.y >= screen.sy + 10 && local.y <= screen.sy + 42;
+        if (hit) supportNodeId = support.nodeId;
+      }
+    }
     let nodeId: number | null = null;
     let best = 0.36;
     for (const node of props.nodes) {
@@ -89,7 +121,7 @@ export function Board(props: Props) {
       gridX >= 0 && gridX <= COLS && gridY >= 0 && gridY <= ROWS && Math.hypot(gridX - structural.x, gridY - structural.y) < 0.34
         ? { x: gridX, y: gridY }
         : null;
-    return { nodeId, memberId, grid };
+    return { nodeId, memberId, supportNodeId, weightId, grid };
   }
 
   const loadByNode = new Map<number, number>();
@@ -104,16 +136,16 @@ export function Board(props: Props) {
       role="img"
       aria-label="트러스 작업판"
       onPointerMove={(event) => {
-        const structural = locate(event);
-        if (!structural) return;
-        props.onHoverMember?.(identify(structural).memberId, { x: event.clientX, y: event.clientY });
+        const local = localPoint(event);
+        if (!local) return;
+        props.onHoverMember?.(identify(local).memberId, { x: event.clientX, y: event.clientY });
       }}
       onPointerLeave={() => props.onHoverMember?.(null, null)}
       onPointerDown={(event) => {
         if (event.button !== 0) return;
-        const structural = locate(event);
-        if (!structural) return;
-        props.onPick?.(identify(structural));
+        const local = localPoint(event);
+        if (!local) return;
+        props.onPick?.(identify(local));
       }}
     >
       <defs>
@@ -158,12 +190,20 @@ export function Board(props: Props) {
           analysis={props.analysis}
           failed={failed.has(member.id)}
           hot={props.hoverMemberId === member.id}
+          picked={props.selected?.kind === "member" && props.selected.id === member.id}
         />
       ))}
       {props.supports.map((support) => {
         const node = props.nodes.find((item) => item.id === support.nodeId);
         if (!node) return null;
-        return <SupportMark key={`${support.nodeId}-${support.type}`} node={node} support={support} />;
+        return (
+          <SupportMark
+            key={`${support.nodeId}-${support.type}`}
+            node={node}
+            support={support}
+            picked={props.selected?.kind === "support" && props.selected.id === support.nodeId}
+          />
+        );
       })}
       {[...loadByNode.entries()].map(([nodeId, newton]) => {
         const node = props.nodes.find((item) => item.id === nodeId);
@@ -188,7 +228,7 @@ export function Board(props: Props) {
             weight={weight}
             node={node}
             stack={stack < 0 ? index : stack}
-            onRemove={props.onRemoveWeight}
+            picked={props.selected?.kind === "weight" && props.selected.id === weight.id}
           />
         );
       })}
@@ -200,6 +240,7 @@ export function Board(props: Props) {
           pending={props.pendingNodeId === node.id}
           fixed={props.fixedNodeIds?.includes(node.id) ?? false}
           onPath={(props.carPath ?? []).includes(node.id)}
+          picked={props.selected?.kind === "node" && props.selected.id === node.id}
         />
       ))}
       {props.car ? <Car x={props.car.x} y={props.car.y} /> : null}
@@ -239,12 +280,14 @@ function MemberLine({
   analysis,
   failed,
   hot,
+  picked,
 }: {
   member: Member;
   nodes: Node[];
   analysis: Analysis | null;
   failed: boolean;
   hot: boolean;
+  picked: boolean;
 }) {
   const a = nodes.find((node) => node.id === member.i);
   const b = nodes.find((node) => node.id === member.j);
@@ -269,6 +312,7 @@ function MemberLine({
   return (
     <g className={failed ? "member failed" : "member"}>
       <line x1={p.sx} y1={p.sy} x2={q.sx} y2={q.sy} stroke="transparent" strokeWidth="18" />
+      {picked ? <line x1={p.sx} y1={p.sy} x2={q.sx} y2={q.sy} className="pick-member" /> : null}
       <line
         x1={p.sx}
         y1={p.sy}
@@ -292,16 +336,19 @@ function NodeStone({
   pending,
   fixed,
   onPath,
+  picked,
 }: {
   node: Node;
   fill: string;
   pending: boolean;
   fixed: boolean;
   onPath: boolean;
+  picked: boolean;
 }) {
   const screen = toScreen(node.x, node.y);
   return (
     <g className="stone">
+      {picked ? <circle cx={screen.sx} cy={screen.sy} r="18" className="pick-ring" /> : null}
       {pending || onPath ? <circle cx={screen.sx} cy={screen.sy} r="16" className="stone-ring" /> : null}
       <circle cx={screen.sx} cy={screen.sy} r="11" fill={fill} stroke={fixed ? "#1d4e89" : "#1a120c"} strokeWidth={fixed ? 2.4 : 1.5} />
       <text x={screen.sx + 14} y={screen.sy - 12} className="node-tag">
@@ -311,11 +358,12 @@ function NodeStone({
   );
 }
 
-function SupportMark({ node, support }: { node: Node; support: Support }) {
+function SupportMark({ node, support, picked }: { node: Node; support: Support; picked: boolean }) {
   const screen = toScreen(node.x, node.y);
   if (support.type === "rollerX") {
     return (
       <g className="support" aria-label={supportLabel(support.type)}>
+        {picked ? <circle cx={screen.sx - 16} cy={screen.sy} r="16" className="pick-ring" /> : null}
         <circle cx={screen.sx - 18} cy={screen.sy} r="5" />
         <path d={`M${screen.sx - 8} ${screen.sy - 10} L${screen.sx - 8} ${screen.sy + 10} L${screen.sx + 2} ${screen.sy} Z`} />
       </g>
@@ -323,6 +371,7 @@ function SupportMark({ node, support }: { node: Node; support: Support }) {
   }
   return (
     <g className="support" aria-label={supportLabel(support.type)}>
+      {picked ? <circle cx={screen.sx} cy={screen.sy + 24} r="18" className="pick-ring" /> : null}
       <path d={`M${screen.sx} ${screen.sy + 12} l-11 16 h22 z`} />
       {support.type === "rollerY" ? <circle cx={screen.sx} cy={screen.sy + 34} r="5" /> : <line x1={screen.sx - 16} y1={screen.sy + 34} x2={screen.sx + 16} y2={screen.sy + 34} />}
     </g>
@@ -348,25 +397,18 @@ function WeightMark({
   weight,
   node,
   stack,
-  onRemove,
+  picked,
 }: {
   weight: BoardWeight;
   node: Node;
   stack: number;
-  onRemove?: (id: number) => void;
+  picked: boolean;
 }) {
   const screen = toScreen(node.x, node.y);
   const y = screen.sy - 30 - stack * 18;
   return (
-    <g
-      className="weight"
-      transform={`translate(${screen.sx - 16} ${y})`}
-      onPointerDown={(event) => {
-        event.stopPropagation();
-        onRemove?.(weight.id);
-      }}
-    >
-      <rect width="32" height="16" rx="4" />
+    <g className="weight" transform={`translate(${screen.sx - 16} ${y})`}>
+      <rect width="32" height="16" rx="4" className={picked ? "picked" : undefined} />
       <text x="16" y="12">
         {weight.newton}N
       </text>

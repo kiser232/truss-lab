@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { designCost, evaluateDesign, type Trial } from "@/lib/truss/evaluate";
 import { explain } from "@/lib/truss/explain";
 import { sampleRoad } from "@/lib/truss/geometry";
@@ -8,18 +8,20 @@ import { MATERIALS } from "@/lib/truss/materials";
 import { analyze } from "@/lib/truss/solver";
 import { STAGES, type Stage } from "@/lib/truss/stages";
 import type { Load, Member, Node } from "@/lib/truss/types";
-import { Board, type BoardPick } from "./board";
+import { Board, type BoardPick, type BoardSelection } from "./board";
 import { COLS, ROWS } from "./grid";
 import { ExplanationView, ForceReport, hoverText } from "./report";
 import { ScenePicker, stageScene, type SceneId } from "./scenes";
 
-type Tool = "node" | "member" | "erase";
+type Tool = "select" | "node" | "member" | "erase";
 
 export function Practice() {
   const [stageId, setStageId] = useState(1);
   const stage = STAGES.find((item) => item.id === stageId) ?? STAGES[0];
   const [build, setBuild] = useState(() => fresh(stage));
   const [tool, setTool] = useState<Tool>("node");
+  const [selected, setSelected] = useState<BoardSelection | null>(null);
+  const [note, setNote] = useState("");
   const [materialId, setMaterialId] = useState("wood");
   const [pending, setPending] = useState<number | null>(null);
   const [carT, setCarT] = useState(0);
@@ -92,10 +94,47 @@ export function Practice() {
     setTrial(null);
     setCarT(0);
     setHint(false);
+    setSelected(null);
+    setNote("");
   }
+
+  const removeSelection = useCallback((target: BoardSelection) => {
+    if (target.kind === "support" || target.kind === "weight") {
+      setNote("미션의 지점과 하중은 지울 수 없습니다.");
+      return;
+    }
+    if (target.kind === "node" && stage.fixedNodeIds.includes(target.id)) {
+      setNote("그림에 놓인 절점은 미션 조건이라 지울 수 없습니다. 직접 놓은 절점과 부재만 지울 수 있습니다.");
+      return;
+    }
+    if (target.kind === "member") {
+      setBuild((current) => ({ ...current, members: current.members.filter((member) => member.id !== target.id) }));
+      setNote("고른 부재만 지웠습니다.");
+    } else {
+      const id = target.id;
+      setBuild((current) => ({
+        ...current,
+        nodes: current.nodes.filter((node) => node.id !== id),
+        members: current.members.filter((member) => member.i !== id && member.j !== id),
+      }));
+      if (pending === id) setPending(null);
+      setNote("고른 절점과 그 절점에 붙은 부재만 지웠습니다.");
+    }
+    setSelected(null);
+  }, [pending, stage]);
 
   function onPick(pick: BoardPick) {
     if (phase === "run") return;
+    if (tool === "select" || tool === "erase") {
+      const target = singleTarget(pick);
+      if (tool === "select") {
+        setSelected(target);
+        setNote(target ? "이 객체만 지우거나, 빈 곳을 눌러 선택을 해제하세요." : "선택을 해제했습니다.");
+        return;
+      }
+      if (target) removeSelection(target);
+      return;
+    }
     if (tool === "node" && pick.grid && pick.nodeId === null) {
       if (pick.grid.x < 0 || pick.grid.x > COLS || pick.grid.y < 0 || pick.grid.y > ROWS) return;
       if (build.nodes.some((node) => Math.hypot(node.x - pick.grid!.x, node.y - pick.grid!.y) < 0.2)) return;
@@ -127,20 +166,20 @@ export function Practice() {
         members: current.members.map((member) => (member.id === pick.memberId ? { ...member, materialId } : member)),
       }));
     }
-    if (tool === "erase") {
-      if (pick.memberId !== null) {
-        setBuild((current) => ({ ...current, members: current.members.filter((member) => member.id !== pick.memberId) }));
-      } else if (pick.nodeId !== null && !stage.fixedNodeIds.includes(pick.nodeId)) {
-        const id = pick.nodeId;
-        setBuild((current) => ({
-          ...current,
-          nodes: current.nodes.filter((node) => node.id !== id),
-          members: current.members.filter((member) => member.i !== id && member.j !== id),
-        }));
-        if (pending === id) setPending(null);
-      }
-    }
   }
+
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      if (event.key !== "Delete" && event.key !== "Backspace") return;
+      const target = event.target;
+      if (target instanceof HTMLElement && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) return;
+      if (!selected) return;
+      event.preventDefault();
+      removeSelection(selected);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [selected, removeSelection]);
 
   function runTest() {
     const result = evaluateDesign(stage, build.nodes, build.members);
@@ -189,6 +228,7 @@ export function Practice() {
         <div className="tool-grid">
           {(
             [
+              ["select", "선택"],
               ["node", "절점"],
               ["member", "부재"],
               ["erase", "지우기"],
@@ -199,6 +239,17 @@ export function Practice() {
             </button>
           ))}
         </div>
+        {selected ? (
+          <div className="row-actions">
+            <span className="badge">{selectionLabel(selected)}</span>
+            <button type="button" onClick={() => removeSelection(selected)}>
+              이 객체 지우기
+            </button>
+          </div>
+        ) : (
+          <p className="muted">부재나 직접 놓은 절점을 하나만 골라 지우세요. 단계 다시는 미션을 처음부터 놓습니다.</p>
+        )}
+        {note ? <p className="note">{note}</p> : null}
         <div className="materials">
           {MATERIALS.map((material) => (
             <button key={material.id} type="button" className={materialId === material.id ? "on" : ""} onClick={() => setMaterialId(material.id)}>
@@ -254,6 +305,7 @@ export function Practice() {
           showStones={phase !== "build" && stage.staticLoads.length > 0}
           showGrid={showGrid}
           scene={scene}
+          selected={selected}
           onPick={onPick}
           onHoverMember={(id, point) => {
             setHoverId(id);
@@ -293,6 +345,21 @@ export function Practice() {
       </aside>
     </div>
   );
+}
+
+function singleTarget(pick: BoardPick): BoardSelection | null {
+  if (pick.weightId !== null) return { kind: "weight", id: pick.weightId };
+  if (pick.supportNodeId !== null) return { kind: "support", id: pick.supportNodeId };
+  if (pick.nodeId !== null) return { kind: "node", id: pick.nodeId };
+  if (pick.memberId !== null) return { kind: "member", id: pick.memberId };
+  return null;
+}
+
+function selectionLabel(target: BoardSelection): string {
+  if (target.kind === "member") return `부재 ${target.id}`;
+  if (target.kind === "node") return `절점 ${target.id}`;
+  if (target.kind === "support") return `지점 ${target.id}`;
+  return `하중 ${target.id}`;
 }
 
 function fresh(stage: Stage): { nodes: Node[]; members: Member[]; nextId: number } {

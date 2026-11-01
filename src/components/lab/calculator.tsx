@@ -1,17 +1,17 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { mergeLoads, sampleRoad } from "@/lib/truss/geometry";
 import { explain } from "@/lib/truss/explain";
 import { MATERIALS } from "@/lib/truss/materials";
 import { analyze } from "@/lib/truss/solver";
 import type { Load, Member, Node, Support, SupportType } from "@/lib/truss/types";
-import { Board, type BoardPick, type BoardWeight } from "./board";
+import { Board, type BoardPick, type BoardSelection, type BoardWeight } from "./board";
 import { COLS, ROWS } from "./grid";
 import { ExplanationView, ForceReport, hoverText } from "./report";
 import { ScenePicker, type SceneId } from "./scenes";
 
-type Tool = "node" | "member" | "erase" | "pin" | "roller" | "weight" | "car";
+type Tool = "select" | "node" | "member" | "erase" | "pin" | "roller" | "weight" | "car";
 
 const WEIGHTS = [
   { id: "pebble", name: "작은 돌", newton: 30 },
@@ -29,6 +29,7 @@ export function Calculator() {
   const [weights, setWeights] = useState<WeightItem[]>([]);
   const [nextId, setNextId] = useState(1);
   const [tool, setTool] = useState<Tool>("node");
+  const [selected, setSelected] = useState<BoardSelection | null>(null);
   const [materialId, setMaterialId] = useState("wood");
   const [weightId, setWeightId] = useState("stone");
   const [inputMode, setInputMode] = useState<"grid" | "coord">("grid");
@@ -118,25 +119,45 @@ export function Calculator() {
     });
   }
 
+  const removeSelection = useCallback((target: BoardSelection) => {
+    if (target.kind === "member") {
+      setMembers((current) => current.filter((member) => member.id !== target.id));
+      setBanner(`부재 ${target.id}만 지웠습니다.`);
+    } else if (target.kind === "weight") {
+      setWeights((current) => current.filter((weight) => weight.id !== target.id));
+      setBanner("고른 하중만 지웠습니다.");
+    } else if (target.kind === "support") {
+      setSupports((current) => current.filter((support) => support.nodeId !== target.id));
+      setBanner(`절점 ${target.id}의 지점만 지웠습니다.`);
+    } else {
+      const id = target.id;
+      setNodes((current) => current.filter((node) => node.id !== id));
+      setMembers((current) => current.filter((member) => member.i !== id && member.j !== id));
+      setSupports((current) => current.filter((support) => support.nodeId !== id));
+      setWeights((current) => current.filter((weight) => weight.nodeId !== id));
+      setCarPath((current) => current.filter((nodeId) => nodeId !== id));
+      if (pending === id) setPending(null);
+      setBanner("고른 절점과 그 절점에 붙은 부재만 지웠습니다.");
+    }
+    setSelected(null);
+  }, [pending]);
+
   function onPick(pick: BoardPick) {
+    if (tool === "select" || tool === "erase") {
+      const target = singleTarget(pick);
+      if (tool === "select") {
+        setSelected(target);
+        setBanner(target ? `${selectionLabel(target)} 선택. 이 객체만 지울 수 있습니다.` : "빈 곳을 눌러 선택을 해제했습니다.");
+        return;
+      }
+      if (target) removeSelection(target);
+      return;
+    }
     if (tool === "node" && inputMode === "grid" && pick.grid && pick.nodeId === null) addNode(pick.grid.x, pick.grid.y);
     if (tool === "member" && pick.nodeId !== null) {
       if (pending === null) setPending(pick.nodeId);
       else if (pending === pick.nodeId) setPending(null);
       else addMember(pending, pick.nodeId);
-    }
-    if (tool === "erase") {
-      if (pick.memberId !== null) {
-        setMembers((current) => current.filter((member) => member.id !== pick.memberId));
-      } else if (pick.nodeId !== null) {
-        const id = pick.nodeId;
-        setNodes((current) => current.filter((node) => node.id !== id));
-        setMembers((current) => current.filter((member) => member.i !== id && member.j !== id));
-        setSupports((current) => current.filter((support) => support.nodeId !== id));
-        setWeights((current) => current.filter((weight) => weight.nodeId !== id));
-        setCarPath((current) => current.filter((nodeId) => nodeId !== id));
-        if (pending === id) setPending(null);
-      }
     }
     if (tool === "pin" && pick.nodeId !== null) toggleSupport(pick.nodeId, "pin");
     if (tool === "roller" && pick.nodeId !== null) toggleSupport(pick.nodeId, "rollerY");
@@ -179,6 +200,7 @@ export function Calculator() {
     setCarT(0);
     setNextId(8);
     setPending(null);
+    setSelected(null);
     setBanner("마루의 60N은 빗변을 압축하고 밑변을 인장합니다. 부재에 마우스를 올려 보세요.");
     setShowExplain(true);
   }
@@ -193,9 +215,23 @@ export function Calculator() {
     carTRef.current = 0;
     setCarT(0);
     setPending(null);
+    setSelected(null);
     setNextId(1);
-    setBanner("보드를 비웠습니다.");
+    setBanner("보드를 비웠습니다. 하나만 지우려면 선택 도구를 쓰세요.");
   }
+
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      if (event.key !== "Delete" && event.key !== "Backspace") return;
+      const target = event.target;
+      if (target instanceof HTMLElement && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) return;
+      if (!selected) return;
+      event.preventDefault();
+      removeSelection(selected);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [selected, removeSelection]);
 
   const boardWeights: BoardWeight[] = weights.map((weight) => {
     const spec = WEIGHTS.find((item) => item.id === weight.weightId)!;
@@ -219,6 +255,7 @@ export function Calculator() {
         <div className="tool-grid">
           {(
             [
+              ["select", "선택"],
               ["node", "절점"],
               ["member", "부재"],
               ["erase", "지우기"],
@@ -233,6 +270,16 @@ export function Calculator() {
             </button>
           ))}
         </div>
+        {selected ? (
+          <div className="row-actions">
+            <span className="badge">{selectionLabel(selected)}</span>
+            <button type="button" onClick={() => removeSelection(selected)}>
+              이 객체 지우기
+            </button>
+          </div>
+        ) : (
+          <p className="muted">선택으로 부재, 절점, 지점, 하중 중 하나만 고른 뒤 지우세요. 비우기는 보드 전체를 지웁니다.</p>
+        )}
         <h3>재료</h3>
         <div className="materials">
           {MATERIALS.map((material) => (
@@ -366,12 +413,12 @@ export function Calculator() {
           hoverMemberId={hoverId}
           showGrid={showGrid}
           scene={scene}
+          selected={selected}
           onPick={onPick}
           onHoverMember={(id, point) => {
             setHoverId(id);
             setPointer(point);
           }}
-          onRemoveWeight={(id) => setWeights((current) => current.filter((weight) => weight.id !== id))}
         />
         {tip && pointer ? (
           <div className="tooltip" style={{ left: pointer.x + 14, top: pointer.y + 14 }}>
@@ -403,6 +450,21 @@ function buildLoads(nodes: Node[], weights: WeightItem[], carPath: number[], car
     if (sample) pieces.push(...sample.loads);
   }
   return mergeLoads(pieces);
+}
+
+function singleTarget(pick: BoardPick): BoardSelection | null {
+  if (pick.weightId !== null) return { kind: "weight", id: pick.weightId };
+  if (pick.supportNodeId !== null) return { kind: "support", id: pick.supportNodeId };
+  if (pick.nodeId !== null) return { kind: "node", id: pick.nodeId };
+  if (pick.memberId !== null) return { kind: "member", id: pick.memberId };
+  return null;
+}
+
+function selectionLabel(target: BoardSelection): string {
+  if (target.kind === "member") return `부재 ${target.id}`;
+  if (target.kind === "node") return `절점 ${target.id}`;
+  if (target.kind === "support") return `지점 ${target.id}`;
+  return `하중 ${target.id}`;
 }
 
 function withRo(name: string): string {

@@ -209,6 +209,9 @@ button.text-button { background: transparent; box-shadow: none; color: var(--bra
 .car rect, .car path { fill: #243044; stroke: none; }
 .car circle { fill: #111; }
 .stone-ring { fill: none; stroke: #9a6730; stroke-width: 2; }
+.pick-ring { fill: none; stroke: #c9852a; stroke-width: 2.5; }
+.pick-member { stroke: #c9852a; stroke-width: 12; stroke-linecap: round; }
+.weight rect.picked { stroke: #c9852a; stroke-width: 2; }
 .wall { stroke: #4a3424; stroke-width: 2; }
 .member.failed line { animation: snap 0.7s ease-in-out infinite; }
 

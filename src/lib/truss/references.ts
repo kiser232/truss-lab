@@ -1,4 +1,7 @@
+import { VALLEY_LEFT, VALLEY_RIGHT } from "./stages";
 import type { Member, Node } from "./types";
+
+const VALLEY_MID = (VALLEY_LEFT + VALLEY_RIGHT) / 2;
 
 /** 교사용 예시 답안. 화면에는 나오지 않는다. */
 export type ReferenceDesign = {
@@ -11,14 +14,14 @@ export const REFERENCES: ReferenceDesign[] = [
   {
     stageId: 1,
     nodes: [
-      { id: 1, x: 0, y: 0 },
-      { id: 2, x: 6, y: 0 },
-      { id: 3, x: 3, y: 0 },
-      { id: 4, x: 3, y: 3 },
+      { id: 1, x: VALLEY_LEFT, y: 0 },
+      { id: 2, x: VALLEY_RIGHT, y: 0 },
+      { id: 3, x: VALLEY_MID, y: 0 },
+      { id: 4, x: VALLEY_MID, y: 3 },
     ],
     members: [
-      { id: 1, i: 1, j: 3, materialId: "plastic" },
-      { id: 2, i: 3, j: 2, materialId: "plastic" },
+      { id: 1, i: 1, j: 3, materialId: "cable" },
+      { id: 2, i: 3, j: 2, materialId: "cable" },
       { id: 3, i: 1, j: 4, materialId: "wood" },
       { id: 4, i: 4, j: 2, materialId: "wood" },
       { id: 5, i: 3, j: 4, materialId: "cable" },
@@ -27,12 +30,12 @@ export const REFERENCES: ReferenceDesign[] = [
   {
     stageId: 2,
     nodes: [
-      { id: 1, x: 0, y: 0 },
-      { id: 2, x: 8, y: 0 },
-      { id: 3, x: 2, y: 0 },
-      { id: 4, x: 6, y: 0 },
-      { id: 5, x: 2, y: 3 },
-      { id: 6, x: 6, y: 3 },
+      { id: 1, x: VALLEY_LEFT, y: 0 },
+      { id: 2, x: VALLEY_RIGHT, y: 0 },
+      { id: 3, x: VALLEY_LEFT + 2, y: 0 },
+      { id: 4, x: VALLEY_LEFT + 6, y: 0 },
+      { id: 5, x: VALLEY_LEFT + 2, y: 3 },
+      { id: 6, x: VALLEY_LEFT + 6, y: 3 },
     ],
     members: [
       { id: 1, i: 1, j: 3, materialId: "cable" },
@@ -49,12 +52,12 @@ export const REFERENCES: ReferenceDesign[] = [
   {
     stageId: 3,
     nodes: [
-      { id: 1, x: 0, y: 0 },
-      { id: 2, x: 8, y: 0 },
-      { id: 3, x: 2, y: 0 },
-      { id: 4, x: 6, y: 0 },
-      { id: 5, x: 2, y: 3 },
-      { id: 6, x: 6, y: 3 },
+      { id: 1, x: VALLEY_LEFT, y: 0 },
+      { id: 2, x: VALLEY_RIGHT, y: 0 },
+      { id: 3, x: VALLEY_LEFT + 2, y: 0 },
+      { id: 4, x: VALLEY_LEFT + 6, y: 0 },
+      { id: 5, x: VALLEY_LEFT + 2, y: 3 },
+      { id: 6, x: VALLEY_LEFT + 6, y: 3 },
     ],
     members: [
       { id: 1, i: 1, j: 3, materialId: "cable" },
@@ -112,10 +115,10 @@ export const REFERENCES: ReferenceDesign[] = [
   {
     stageId: 6,
     nodes: [
-      { id: 1, x: 0, y: 0 },
-      { id: 2, x: 8, y: 0 },
-      { id: 3, x: 4, y: 0 },
-      { id: 4, x: 4, y: 3 },
+      { id: 1, x: VALLEY_LEFT, y: 0 },
+      { id: 2, x: VALLEY_RIGHT, y: 0 },
+      { id: 3, x: VALLEY_MID, y: 0 },
+      { id: 4, x: VALLEY_MID, y: 3 },
     ],
     members: [
       { id: 1, i: 1, j: 3, materialId: "cable" },
