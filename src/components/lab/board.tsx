@@ -5,6 +5,7 @@ import { MATERIAL_MAP } from "@/lib/truss/materials";
 import { supportLabel } from "@/lib/truss/geometry";
 import type { Analysis, Load, Member, Node, Support } from "@/lib/truss/types";
 import { BOARD_H, BOARD_W, COLS, PAD_L, PAD_T, ROWS, STEP, fromScreen, pointSegmentDistance, toScreen } from "./grid";
+import { SceneBackdrop, type SceneId } from "./scenes";
 
 export type BoardPick = {
   nodeId: number | null;
@@ -33,6 +34,8 @@ type Props = {
   fixedNodeIds?: number[];
   ghostLoads?: boolean;
   showStones?: boolean;
+  showGrid?: boolean;
+  scene?: SceneId;
   onPick?: (pick: BoardPick) => void;
   onHoverMember?: (memberId: number | null, point: { x: number; y: number } | null) => void;
   onRemoveWeight?: (id: number) => void;
@@ -99,7 +102,7 @@ export function Board(props: Props) {
       className={`board-svg${loose ? " is-loose" : ""}${failed.size ? " is-broken" : ""}`}
       viewBox={`0 0 ${BOARD_W} ${BOARD_H}`}
       role="img"
-      aria-label="트러스 격자판"
+      aria-label="트러스 작업판"
       onPointerMove={(event) => {
         const structural = locate(event);
         if (!structural) return;
@@ -119,32 +122,32 @@ export function Board(props: Props) {
           <stop offset="65%" stopColor="#f3ecdf" />
           <stop offset="100%" stopColor="#c9bba6" />
         </radialGradient>
-        <pattern id={`grain-${rawId}`} width="12" height="12" patternUnits="userSpaceOnUse">
-          <path d="M0 12 L12 0" stroke="rgba(90,50,16,.08)" />
-        </pattern>
       </defs>
-      <rect x="8" y="8" width={BOARD_W - 16} height={BOARD_H - 16} rx="18" className="board-wood" />
-      <rect x="18" y="18" width={BOARD_W - 36} height={BOARD_H - 36} rx="8" fill={`url(#grain-${rawId})`} />
-      {Array.from({ length: COLS + 1 }, (_, index) => (
-        <line
-          key={`v${index}`}
-          className="grid-line"
-          x1={PAD_L + index * STEP}
-          y1={PAD_T}
-          x2={PAD_L + index * STEP}
-          y2={PAD_T + ROWS * STEP}
-        />
-      ))}
-      {Array.from({ length: ROWS + 1 }, (_, index) => (
-        <line
-          key={`h${index}`}
-          className="grid-line"
-          x1={PAD_L}
-          y1={PAD_T + index * STEP}
-          x2={PAD_L + COLS * STEP}
-          y2={PAD_T + index * STEP}
-        />
-      ))}
+      <SceneBackdrop scene={props.scene ?? "paper"} uid={rawId} />
+      {props.showGrid
+        ? Array.from({ length: COLS + 1 }, (_, index) => (
+            <line
+              key={`v${index}`}
+              className="grid-line"
+              x1={PAD_L + index * STEP}
+              y1={PAD_T}
+              x2={PAD_L + index * STEP}
+              y2={PAD_T + ROWS * STEP}
+            />
+          ))
+        : null}
+      {props.showGrid
+        ? Array.from({ length: ROWS + 1 }, (_, index) => (
+            <line
+              key={`h${index}`}
+              className="grid-line"
+              x1={PAD_L}
+              y1={PAD_T + index * STEP}
+              x2={PAD_L + COLS * STEP}
+              y2={PAD_T + index * STEP}
+            />
+          ))
+        : null}
       {wall ? <Wall nodes={props.nodes} supports={props.supports} /> : null}
       <Road nodes={props.nodes} path={props.carPath ?? []} />
       {props.members.map((member) => (

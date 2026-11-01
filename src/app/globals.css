@@ -146,8 +146,51 @@ button.text-button { background: transparent; box-shadow: none; color: var(--bra
   box-shadow: 0 24px 50px rgba(48, 28, 8, 0.18);
 }
 .board-svg.is-loose { animation: shake 0.45s linear infinite; }
-.board-wood { fill: #e0b56a; }
-.grid-line { stroke: rgba(62, 36, 12, 0.35); stroke-width: 1; }
+.grid-line { stroke: rgba(28, 36, 32, 0.42); stroke-width: 1.15; }
+.board-options, .scene-picker { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.board-options { padding: 0 8px 10px; }
+.scene-picker button { padding: 0.28rem 0.62rem; font-size: 0.86rem; }
+
+.gate {
+  min-height: calc(100vh - 36px);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 48px 12px 32px;
+}
+.gate .brand h1 { font-size: clamp(2.8rem, 6vw, 4.6rem); }
+.gate .brand p:last-child { color: var(--muted); font-size: 1.05rem; }
+.gate-choices {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  margin-top: 28px;
+}
+.gate-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+  width: 100%;
+  border-radius: 22px;
+  padding: 22px 24px 28px;
+  min-height: 280px;
+  background: rgba(255, 250, 242, 0.92);
+  box-shadow: 0 18px 40px rgba(70, 42, 12, 0.08);
+}
+.gate-card strong {
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-size: clamp(1.8rem, 3vw, 2.4rem);
+  font-weight: 560;
+  letter-spacing: -0.03em;
+  margin: 8px 0 6px;
+}
+.gate-card > span:last-child { color: var(--muted); line-height: 1.5; }
+.gate-art { width: 100%; height: 96px; margin-bottom: 12px; }
+.gate-art path, .gate-art circle { fill: none; stroke: #2a2118; stroke-width: 2.4; stroke-linejoin: round; stroke-linecap: round; }
+.gate-art circle { fill: #f7f1e6; }
+.gate-art .gate-bank { fill: #8fa976; stroke: none; }
+.gate-art .gate-water { stroke: #6ea4b8; fill: none; }
 .member-tag, .node-tag, .load text, .weight text, .load-tag {
   font-family: var(--font-mono), ui-monospace, monospace;
   font-size: 11px;
@@ -289,6 +332,6 @@ input[type="text"], input:not([type="range"]) {
 }
 
 @media (max-width: 1100px) {
-  .workspace, .card-row { grid-template-columns: 1fr; }
+  .workspace, .card-row, .gate-choices { grid-template-columns: 1fr; }
   .topbar { flex-direction: column; align-items: start; }
 }

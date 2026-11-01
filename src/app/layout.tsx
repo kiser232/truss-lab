@@ -25,7 +25,7 @@ const mono = IBM_Plex_Mono({
 
 export const metadata: Metadata = {
   title: "트러스 실습실",
-  description: "건축공학과 학생을 위한 트러스 계산기, 실습, 퀴즈. 절점법으로 축력을 읽고 재료의 인장·압축을 구분합니다.",
+  description: "건축공학과 학생을 위한 트러스 계산기와 실습. 절점법으로 축력을 읽고 재료의 인장·압축을 구분합니다.",
   applicationName: "트러스 실습실",
 };
 

@@ -11,6 +11,7 @@ import type { Load, Member, Node } from "@/lib/truss/types";
 import { Board, type BoardPick } from "./board";
 import { COLS, ROWS } from "./grid";
 import { ExplanationView, ForceReport, hoverText } from "./report";
+import { ScenePicker, stageScene, type SceneId } from "./scenes";
 
 type Tool = "node" | "member" | "erase";
 
@@ -29,6 +30,8 @@ export function Practice() {
   const [pointer, setPointer] = useState<{ x: number; y: number } | null>(null);
   const [hint, setHint] = useState(false);
   const [cleared, setCleared] = useState<number[]>([]);
+  const [sceneChoice, setSceneChoice] = useState<SceneId | "mission">("mission");
+  const [gridLock, setGridLock] = useState(false);
   const carRef = useRef(0);
 
   useEffect(() => {
@@ -160,6 +163,8 @@ export function Practice() {
 
   const hoverMember = build.members.find((member) => member.id === hoverId) ?? null;
   const tip = phase === "build" ? null : hoverText(analysis, hoverMember);
+  const scene = sceneChoice === "mission" ? stageScene(stage.id) : sceneChoice;
+  const showGrid = gridLock || tool === "node";
 
   return (
     <div className="workspace">
@@ -222,6 +227,18 @@ export function Practice() {
         <div className="stage-bar">
           <span>{phase === "build" ? "파란 테두리 절점은 고정입니다. 하중은 시험 때 절점에만 작용합니다." : trial?.title}</span>
         </div>
+        <div className="board-options">
+          <ScenePicker value={sceneChoice} onChange={setSceneChoice} includeMission />
+          <button
+            type="button"
+            className={gridLock ? "on" : ""}
+            aria-pressed={gridLock}
+            title="절점을 놓을 때는 격자가 항상 보입니다. 다른 도구에서도 보려면 켜 두세요."
+            onClick={() => setGridLock((value) => !value)}
+          >
+            격자 항상 표시
+          </button>
+        </div>
         <Board
           nodes={build.nodes}
           members={build.members}
@@ -235,6 +252,8 @@ export function Practice() {
           fixedNodeIds={stage.fixedNodeIds}
           ghostLoads={phase === "build"}
           showStones={phase !== "build" && stage.staticLoads.length > 0}
+          showGrid={showGrid}
+          scene={scene}
           onPick={onPick}
           onHoverMember={(id, point) => {
             setHoverId(id);

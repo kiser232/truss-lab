@@ -9,6 +9,7 @@ import type { Load, Member, Node, Support, SupportType } from "@/lib/truss/types
 import { Board, type BoardPick, type BoardWeight } from "./board";
 import { COLS, ROWS } from "./grid";
 import { ExplanationView, ForceReport, hoverText } from "./report";
+import { ScenePicker, type SceneId } from "./scenes";
 
 type Tool = "node" | "member" | "erase" | "pin" | "roller" | "weight" | "car";
 
@@ -31,6 +32,8 @@ export function Calculator() {
   const [materialId, setMaterialId] = useState("wood");
   const [weightId, setWeightId] = useState("stone");
   const [inputMode, setInputMode] = useState<"grid" | "coord">("grid");
+  const [scene, setScene] = useState<SceneId>("workshop");
+  const [gridLock, setGridLock] = useState(false);
   const [pending, setPending] = useState<number | null>(null);
   const [carPath, setCarPath] = useState<number[]>([]);
   const [carWeight, setCarWeight] = useState(100);
@@ -40,7 +43,7 @@ export function Calculator() {
   const [hoverId, setHoverId] = useState<number | null>(null);
   const [pointer, setPointer] = useState<{ x: number; y: number } | null>(null);
   const [coord, setCoord] = useState({ x: "4", y: "2" });
-  const [banner, setBanner] = useState("격자에 절점을 놓고 두 점을 이어 보세요. 집 모양 예제로 바로 축력을 볼 수도 있습니다.");
+  const [banner, setBanner] = useState("절점 도구를 고르면 격자가 나타납니다. 집 모양 예제로 바로 축력을 볼 수도 있습니다.");
   const [showExplain, setShowExplain] = useState(false);
 
   const loads = useMemo(() => buildLoads(nodes, weights, carPath, carWeight, carT), [nodes, weights, carPath, carWeight, carT]);
@@ -200,6 +203,7 @@ export function Calculator() {
   });
   const hoverMember = members.find((member) => member.id === hoverId) ?? null;
   const tip = hoverText(analysis, hoverMember);
+  const showGrid = gridLock || tool === "node" || inputMode === "coord";
 
   return (
     <div className="workspace">
@@ -332,6 +336,23 @@ export function Calculator() {
             </button>
           </span>
         </div>
+        <div className="board-options">
+          <ScenePicker
+            value={scene}
+            onChange={(next) => {
+              if (next !== "mission") setScene(next);
+            }}
+          />
+          <button
+            type="button"
+            className={gridLock ? "on" : ""}
+            aria-pressed={gridLock}
+            title="절점을 놓을 때는 격자가 항상 보입니다. 다른 도구에서도 보려면 켜 두세요."
+            onClick={() => setGridLock((value) => !value)}
+          >
+            격자 항상 표시
+          </button>
+        </div>
         <Board
           nodes={nodes}
           members={members}
@@ -343,6 +364,8 @@ export function Calculator() {
           carPath={carPath}
           pendingNodeId={pending}
           hoverMemberId={hoverId}
+          showGrid={showGrid}
+          scene={scene}
           onPick={onPick}
           onHoverMember={(id, point) => {
             setHoverId(id);
