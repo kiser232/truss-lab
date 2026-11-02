@@ -4,8 +4,9 @@ import { useState } from "react";
 import { Calculator } from "./calculator";
 import { Lesson } from "./lesson";
 import { Practice } from "./practice";
+import { QuizMode } from "./quiz-mode";
 
-type Mode = "calc" | "practice";
+type Mode = "calc" | "practice" | "quiz";
 
 const MODES: Record<Mode, { label: string; copy: string }> = {
   calc: {
@@ -16,11 +17,15 @@ const MODES: Record<Mode, { label: string; copy: string }> = {
     label: "실습",
     copy: "단계마다 주어진 예산 안에서 트러스를 설계합니다. 배경은 미션에 맞추거나 직접 고를 수 있습니다.",
   },
+  quiz: {
+    label: "퀴즈",
+    copy: "재료, 트러스 형식, 인장·압축 부재를 무작위로 묻습니다. 해설을 보면 다음 문제가 이어집니다.",
+  },
 };
 
 export function Lab() {
   const [mode, setMode] = useState<Mode | null>(null);
-  const [opened, setOpened] = useState<{ calc: boolean; practice: boolean }>({ calc: false, practice: false });
+  const [opened, setOpened] = useState<{ calc: boolean; practice: boolean; quiz: boolean }>({ calc: false, practice: false, quiz: false });
   const [lesson, setLesson] = useState(false);
 
   function open(next: Mode) {
@@ -61,6 +66,11 @@ export function Lab() {
           <Practice />
         </div>
       ) : null}
+      {opened.quiz ? (
+        <div hidden={mode !== "quiz"}>
+          <QuizMode />
+        </div>
+      ) : null}
       {mode !== null ? (
         <footer className="colophon">
           격자 한 칸은 1m, 힘은 N인 교육용 모형입니다. 인장은 파랑, 압축은 적색입니다. 부재가 허용축력을 넘기면 파괴되고, 견디면 커서를 올린 부재의 축력이 나타납니다.
@@ -92,6 +102,12 @@ function Gate({ onOpen }: { onOpen: (mode: Mode) => void }) {
           <strong>실습</strong>
           <span>예산 안에서 단계별 미션 트러스를 설계합니다.</span>
         </button>
+        <button type="button" className="gate-card" onClick={() => onOpen("quiz")}>
+          <GateQuiz />
+          <span className="kicker">03</span>
+          <strong>퀴즈</strong>
+          <span>재료와 트러스 형식, 인장·압축 부재를 무작위로 확인합니다.</span>
+        </button>
       </div>
     </section>
   );
@@ -107,6 +123,19 @@ function GateTruss() {
       <circle cx="110" cy="78" r="4" />
       <circle cx="202" cy="78" r="4" />
       <circle cx="110" cy="22" r="4" />
+    </svg>
+  );
+}
+
+function GateQuiz() {
+  return (
+    <svg className="gate-art" viewBox="0 0 220 96" aria-hidden="true">
+      <rect x="28" y="22" width="52" height="58" rx="8" className="gate-card-face" />
+      <path d="M40 40h28M40 52h20" />
+      <rect x="140" y="22" width="52" height="58" rx="8" className="gate-card-face" />
+      <path d="M152 64h28M152 52h18" />
+      <path d="M96 70 L110 34 L124 70" />
+      <circle cx="110" cy="34" r="3.5" />
     </svg>
   );
 }
