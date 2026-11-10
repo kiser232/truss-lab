@@ -1,4 +1,5 @@
 import { compressionAllow, materialById } from "./materials";
+import { analyzeSpace, isSpaceModel } from "./space";
 import { fmt, fmtCoef, letter, signed } from "./format";
 import type {
   Analysis,
@@ -37,7 +38,7 @@ export function memberLength(nodes: Node[], member: Member): number {
   const a = nodes.find((n) => n.id === member.i);
   const b = nodes.find((n) => n.id === member.j);
   if (!a || !b) return 0;
-  return Math.hypot(b.x - a.x, b.y - a.y);
+  return Math.hypot(b.x - a.x, b.y - a.y, (b.z ?? 0) - (a.z ?? 0));
 }
 
 export function modelCost(model: Model): number {
@@ -611,6 +612,7 @@ function forceOf(
 }
 
 export function analyze(model: Model, loadOverride?: Load[]): Analysis {
+  if (isSpaceModel(model)) return analyzeSpace(model, loadOverride);
   const loads = mergeLoads(loadOverride ?? model.loads);
   if (model.nodes.length < 2 && model.members.length === 0) {
     return emptyAnalysis({ status: "empty", message: "절점을 놓으세요" });

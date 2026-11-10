@@ -1,4 +1,5 @@
 import { analyze, memberName } from "../lib/analyze";
+import { TRIPOD } from "../lib/space";
 import { gradeMission, missionCases } from "../lib/grade";
 import { compressionAllow, CONTEST_MATERIALS, LAB_MATERIALS, materialById } from "../lib/materials";
 import { MISSIONS } from "../lib/missions";
@@ -171,6 +172,17 @@ for (const mission of MISSIONS) {
     near(result.forces.find((f) => f.name === "AB")!.axial, -70, 0.05);
   }
 }
+
+const tripod = analyze(TRIPOD);
+console.log("tripod", tripod.status, tripod.method, tripod.space, tripod.forces.map((force) => force.axial.toFixed(2)).join(" "));
+assert(tripod.space === true, "tripod space");
+assert(tripod.method === "joints", "tripod joints");
+assert(tripod.status === "ok", "tripod ok");
+const expected = (60 * Math.hypot(2, 2)) / 6;
+for (const force of tripod.forces) near(force.axial, -expected, 0.05);
+assert(tripod.steps.some((step) => step.lines.some((line) => line.text.includes("ΣFz"))), "tripod fz");
+const flat = analyze({ ...TRIPOD, nodes: TRIPOD.nodes.map((node) => ({ ...node, y: 0 })) });
+assert(flat.status === "unstable", "flat tripod");
 
 if (failed) {
   console.error(`\n${failed} missions failed`);

@@ -3,10 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { memberName } from "@/lib/analyze";
 import { compressionAllow } from "@/lib/materials";
+import { quantize } from "@/lib/view";
 import type { Analysis, Load, Material, Model, SupportType } from "@/lib/types";
+import { SpaceBoard } from "./space-board";
 import { TrussBoard, type Hit, type WorldPoint } from "./truss-board";
 
-export type Tool = "select" | "node" | "member" | "pin" | "rollerY" | "rollerX" | "load" | "erase";
+export type Tool = "select" | "node" | "member" | "pin" | "rollerY" | "rollerX" | "ball" | "slot" | "load" | "erase";
 
 const TOOL_LABEL: Record<Tool, string> = {
   select: "선택",
@@ -15,9 +17,13 @@ const TOOL_LABEL: Record<Tool, string> = {
   pin: "핀",
   rollerY: "롤러",
   rollerX: "가로",
+  ball: "볼",
+  slot: "홈",
   load: "하중",
   erase: "지우기",
 };
+
+const SPACE_TOOLS: Tool[] = ["select", "node", "member", "ball", "slot", "rollerY", "load", "erase"];
 
 function maxId(model: Model) {
   return Math.max(0, ...model.nodes.map((node) => node.id), ...model.members.map((member) => member.id));
@@ -39,6 +45,8 @@ export function Workspace({
   showCost = false,
   materialId: controlledMaterial,
   onMaterial,
+  space = false,
+  onSpace,
 }: {
   model: Model;
   onChange: (model: Model) => void;
@@ -55,8 +63,10 @@ export function Workspace({
   showCost?: boolean;
   materialId?: string;
   onMaterial?: (id: string) => void;
+  space?: boolean;
+  onSpace?: (next: boolean) => void;
 }) {
-  const [tool, setTool] = useState<Tool>(tools.includes("member") ? "member" : tools[0]);
+  const [tool, setTool] = useState<Tool>(space ? "node" : tools.includes("member") ? "member" : tools[0]);
   const [innerMaterial, setInnerMaterial] = useState(
     () => materials.find((item) => item.id === "wood")?.id ?? materials[0]?.id ?? "wood",
   );
@@ -69,7 +79,9 @@ export function Workspace({
   const [cursor, setCursor] = useState<{ x: number; y: number } | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; memberId: number | null } | null>(null);
   const [newton, setNewton] = useState(60);
+  const [height, setHeight] = useState("2");
   const [selected, setSelected] = useState<{ kind: "node" | "member"; id: number } | null>(null);
+  const activeTools = space ? SPACE_TOOLS : tools;
   const material = materials.find((item) => item.id === materialId) ?? materials[0];
   const activeMaterialId = material?.id ?? materialId;
 
@@ -132,8 +144,16 @@ export function Workspace({
       erase(hit);
       return;
     }
-    if (tool === "node" && hit.grid && !hit.nodeId) {
-      const occupied = model.nodes.some((node) => Math.hypot(node.x - hit.grid!.x, node.y - hit.grid!.y) < 0.2);
+    if (tool === "node" && space && hit.ground && !hit.nodeId) {
+      const y = Math.min(16, Math.max(0, quantize(Number(height) || 0, 0.05)));
+      const next = { x: hit.ground.x, y, z: hit.ground.z };
+      const occupied = model.nodes.some((node) => Math.hypot(node.x - next.x, node.y - next.y, (node.z ?? 0) - next.z) < 0.12);
+      if (occupied) return;
+      onChange({ ...model, nodes: [...model.nodes, { id: maxId(model) + 1, ...next }] });
+      return;
+    }
+    if (tool === "node" && !space && hit.grid && !hit.nodeId) {
+      const occupied = model.nodes.some((node) => Math.hypot(node.x - hit.grid!.x, node.y - hit.grid!.y) < 0.02);
       if (occupied) return;
       onChange({
         ...model,
@@ -170,7 +190,7 @@ export function Workspace({
       });
       return;
     }
-    if ((tool === "pin" || tool === "rollerY" || tool === "rollerX") && hit.nodeId) {
+    if ((tool === "pin" || tool === "rollerY" || tool === "rollerX" || tool === "ball" || tool === "slot") && hit.nodeId) {
       setSupport(hit.nodeId, tool);
       return;
     }
@@ -211,7 +231,7 @@ export function Workspace({
     return model.members.map((member) => {
       const a = model.nodes.find((node) => node.id === member.i);
       const b = model.nodes.find((node) => node.id === member.j);
-      const length = a && b ? Math.hypot(b.x - a.x, b.y - a.y) : 0;
+      const length = a && b ? Math.hypot(b.x - a.x, b.y - a.y, (b.z ?? 0) - (a.z ?? 0)) : 0;
       const mat = materials.find((item) => item.id === member.materialId);
       return {
         id: member.id,
@@ -226,7 +246,13 @@ export function Workspace({
     <div>
       {!readOnly ? (
         <div className="row-tools" style={{ marginBottom: 10 }}>
-          {tools.map((item) => (
+          {onSpace ? (
+            <span className="segmented">
+              <button type="button" className={!space ? "on" : ""} onClick={() => { onSpace(false); if (tool === "ball" || tool === "slot") setTool("pin"); }}>평면</button>
+              <button type="button" className={space ? "on" : ""} onClick={() => { onSpace(true); setTool("node"); setPending(null); }}>3D</button>
+            </span>
+          ) : null}
+          {activeTools.map((item) => (
             <button key={item} type="button" className={`tool ${tool === item ? "on" : ""}`} onClick={() => { setTool(item); setPending(null); }}>
               {TOOL_LABEL[item]}
             </button>
@@ -245,6 +271,29 @@ export function Workspace({
             <small>{material?.costPerM}/m</small>
             <small>우클릭</small>
           </button>
+          {space && tool === "node" ? (
+            <label className="height-field">
+              높이 y
+              <input value={height} inputMode="decimal" onChange={(event) => setHeight(event.target.value)} />
+            </label>
+          ) : null}
+          {space && selected?.kind === "node" ? (
+            <label className="height-field">
+              선택 y
+              <input
+                inputMode="decimal"
+                value={String(model.nodes.find((node) => node.id === selected.id)?.y ?? 0)}
+                onChange={(event) => {
+                  const y = Number(event.target.value);
+                  if (!Number.isFinite(y)) return;
+                  onChange({
+                    ...model,
+                    nodes: model.nodes.map((node) => (node.id === selected.id ? { ...node, y } : node)),
+                  });
+                }}
+              />
+            </label>
+          ) : null}
           {tool === "load" ? (
             <span className="row-tools">
               {[20, 40, 60, 80, 100].map((value) => (
@@ -257,20 +306,34 @@ export function Workspace({
         </div>
       ) : null}
 
-      <TrussBoard
-        model={model}
-        loads={displayLoads}
-        analysis={analysis}
-        scene={scene}
-        pendingId={pending}
-        cursor={cursor}
-        tool={readOnly ? "select" : tool}
-        focusNodeId={focusNodeId}
-        focusMemberIds={focusMemberIds}
-        onLeft={onLeft}
-        onRight={onRight}
-        onMove={(point: WorldPoint | null) => setCursor(point ? { x: point.x, y: point.y } : null)}
-      />
+      {space ? (
+        <SpaceBoard
+          model={model}
+          analysis={analysis}
+          pendingId={pending}
+          tool={readOnly ? "select" : tool}
+          placeY={tool === "node" ? Math.min(16, Math.max(0, quantize(Number(height) || 0, 0.05))) : null}
+          focusNodeId={focusNodeId}
+          focusMemberIds={focusMemberIds}
+          onLeft={onLeft}
+          onRight={onRight}
+        />
+      ) : (
+        <TrussBoard
+          model={model}
+          loads={displayLoads}
+          analysis={analysis}
+          scene={scene}
+          pendingId={pending}
+          cursor={cursor}
+          tool={readOnly ? "select" : tool}
+          focusNodeId={focusNodeId}
+          focusMemberIds={focusMemberIds}
+          onLeft={onLeft}
+          onRight={onRight}
+          onMove={(point: WorldPoint | null) => setCursor(point ? { x: point.x, y: point.y } : null)}
+        />
+      )}
 
       {showCost && costRows.length > 0 ? (
         <div className="chips" style={{ marginTop: 8 }}>
@@ -324,5 +387,5 @@ function lengthOf(model: Model, member: Model["members"][number]) {
   const a = model.nodes.find((node) => node.id === member.i);
   const b = model.nodes.find((node) => node.id === member.j);
   if (!a || !b) return 0;
-  return Math.hypot(b.x - a.x, b.y - a.y);
+  return Math.hypot(b.x - a.x, b.y - a.y, (b.z ?? 0) - (a.z ?? 0));
 }

@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { analyze } from "@/lib/analyze";
 import { LAB_MATERIALS } from "@/lib/materials";
+import { TRIPOD } from "@/lib/space";
 import type { Model } from "@/lib/types";
 import { SolutionPanel } from "@/components/solution-panel";
 import { Workspace } from "@/components/workspace";
@@ -29,6 +30,7 @@ const EMPTY: Model = { nodes: [], members: [], supports: [], loads: [] };
 
 export default function LabPage() {
   const [model, setModel] = useState<Model>(HOUSE);
+  const [space, setSpace] = useState(false);
   const [step, setStep] = useState<number | null>(null);
   const analysis = useMemo(() => analyze(model), [model]);
   const focus = step !== null ? analysis.steps[step] : undefined;
@@ -41,8 +43,11 @@ export default function LabPage() {
           <h1 style={{ margin: "4px 0 0", fontSize: 28, letterSpacing: "-0.04em" }}>트러스 계산기</h1>
         </div>
         <div className="row-tools">
-          <button type="button" className="ghost" onClick={() => { setModel(HOUSE); setStep(null); }}>
+          <button type="button" className="ghost" onClick={() => { setSpace(false); setModel(HOUSE); setStep(null); }}>
             집 모양
+          </button>
+          <button type="button" className="ghost" onClick={() => { setSpace(true); setModel(TRIPOD); setStep(null); }}>
+            삼각대
           </button>
           <button type="button" className="ghost" onClick={() => { setModel(EMPTY); setStep(null); }}>
             비우기
@@ -51,6 +56,7 @@ export default function LabPage() {
       </div>
       <div className="lab-grid">
         <Workspace
+          key={space ? "space" : "plane"}
           model={model}
           onChange={(next) => {
             setModel(next);
@@ -60,6 +66,12 @@ export default function LabPage() {
           analysis={analysis.status === "unstable" || analysis.status === "invalid" || analysis.status === "empty" ? null : analysis}
           tools={["select", "node", "member", "pin", "rollerY", "rollerX", "load", "erase"]}
           scene="paper"
+          space={space}
+          onSpace={(next) => {
+            setSpace(next);
+            setModel(EMPTY);
+            setStep(null);
+          }}
           focusNodeId={focus?.focusNodeId}
           focusMemberIds={focus?.memberIds}
         />
@@ -70,7 +82,7 @@ export default function LabPage() {
         @media (max-width: 980px) { .lab-grid { grid-template-columns: 1fr; } }
       `}</style>
       <p className="note" style={{ marginTop: 8 }}>
-        부재를 이을 때 우클릭으로 자재. + 인장 · − 압축. 한 칸 = 1m.
+        부재를 이을 때 우클릭으로 자재. + 인장 · − 압축. 휠로 확대하면 격자 간격이 0.25m, 0.1m, 0.05m까지 줄어듭니다. 3D는 바닥의 x·z와 높이 y를 씁니다.
       </p>
     </main>
   );

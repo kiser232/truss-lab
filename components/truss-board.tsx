@@ -1,10 +1,12 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { nodeLabel } from "@/lib/analyze";
 import { materialById } from "@/lib/materials";
 import { signed } from "@/lib/format";
+import { clampZoom, quantize, snapStep } from "@/lib/view";
 import type { Analysis, Load, Model, SupportType } from "@/lib/types";
+import { ZoomBar } from "./zoom-bar";
 
 export const PAD = 54;
 export const SCALE = 68;
@@ -12,36 +14,42 @@ export const WORLD_W = 12;
 export const WORLD_H = 8;
 export const VIEW_W = PAD * 2 + WORLD_W * SCALE;
 export const VIEW_H = PAD * 2 + WORLD_H * SCALE;
+export const LIMIT = { minX: -30, maxX: 42, minY: -16, maxY: 28 };
+
+export type Camera = { cx: number; cy: number; zoom: number };
+export const HOME_CAMERA: Camera = { cx: WORLD_W / 2, cy: WORLD_H / 2, zoom: 1 };
 
 export type WorldPoint = { x: number; y: number; sx: number; sy: number };
 
-export function toScreen(x: number, y: number) {
-  return { sx: PAD + x * SCALE, sy: VIEW_H - PAD - y * SCALE };
+export function toScreen(x: number, y: number, cam: Camera = HOME_CAMERA) {
+  const scale = SCALE * cam.zoom;
+  return {
+    sx: VIEW_W / 2 + (x - cam.cx) * scale,
+    sy: VIEW_H / 2 - (y - cam.cy) * scale,
+  };
 }
 
-export function fromClient(svg: SVGSVGElement, clientX: number, clientY: number): WorldPoint | null {
+export function fromClient(svg: SVGSVGElement, clientX: number, clientY: number, cam: Camera = HOME_CAMERA): WorldPoint | null {
   const point = svg.createSVGPoint();
   point.x = clientX;
   point.y = clientY;
   const ctm = svg.getScreenCTM();
   if (!ctm) return null;
   const mapped = point.matrixTransform(ctm.inverse());
+  const scale = SCALE * cam.zoom;
   return {
-    x: (mapped.x - PAD) / SCALE,
-    y: (VIEW_H - PAD - mapped.y) / SCALE,
+    x: cam.cx + (mapped.x - VIEW_W / 2) / scale,
+    y: cam.cy - (mapped.y - VIEW_H / 2) / scale,
     sx: mapped.x,
     sy: mapped.y,
   };
 }
 
-export function snap(value: number) {
-  return Math.round(value * 2) / 2;
-}
-
-export function clampGrid(x: number, y: number) {
+export function clampGrid(x: number, y: number, zoom = 1) {
+  const step = snapStep(zoom);
   return {
-    x: Math.min(WORLD_W, Math.max(0, snap(x))),
-    y: Math.min(WORLD_H, Math.max(0, snap(y))),
+    x: Math.min(LIMIT.maxX, Math.max(LIMIT.minX, quantize(x, step))),
+    y: Math.min(LIMIT.maxY, Math.max(LIMIT.minY, quantize(y, step))),
   };
 }
 
@@ -60,16 +68,17 @@ export type Hit = {
   memberId: number | null;
   world: { x: number; y: number } | null;
   grid: { x: number; y: number } | null;
+  ground?: { x: number; z: number } | null;
 };
 
-export function hitTest(point: WorldPoint, model: Model): Hit {
-  const grid = point.x >= -0.35 && point.x <= WORLD_W + 0.35 && point.y >= -0.35 && point.y <= WORLD_H + 0.35
-    ? clampGrid(point.x, point.y)
+export function hitTest(point: WorldPoint, model: Model, cam: Camera = HOME_CAMERA): Hit {
+  const grid = point.x >= LIMIT.minX - 0.4 && point.x <= LIMIT.maxX + 0.4 && point.y >= LIMIT.minY - 0.4 && point.y <= LIMIT.maxY + 0.4
+    ? clampGrid(point.x, point.y, cam.zoom)
     : null;
   let nodeId: number | null = null;
   let best = 18;
   for (const node of model.nodes) {
-    const screen = toScreen(node.x, node.y);
+    const screen = toScreen(node.x, node.y, cam);
     const d = Math.hypot(point.sx - screen.sx, point.sy - screen.sy);
     if (d < best) {
       best = d;
@@ -83,8 +92,8 @@ export function hitTest(point: WorldPoint, model: Model): Hit {
       const a = model.nodes.find((node) => node.id === member.i);
       const b = model.nodes.find((node) => node.id === member.j);
       if (!a || !b) continue;
-      const as = toScreen(a.x, a.y);
-      const bs = toScreen(b.x, b.y);
+      const as = toScreen(a.x, a.y, cam);
+      const bs = toScreen(b.x, b.y, cam);
       const d = distToSegment(point.sx, point.sy, as.sx, as.sy, bs.sx, bs.sy);
       if (d < memberBest) {
         memberBest = d;
@@ -139,8 +148,8 @@ function Scene({ scene }: { scene: "paper" | "valley" | "road" | "cliff" | "desk
   return <rect width={VIEW_W} height={VIEW_H} fill="#f7f8fb" />;
 }
 
-function SupportGlyph({ x, y, type }: { x: number; y: number; type: SupportType }) {
-  const p = toScreen(x, y);
+function SupportGlyph({ sx, sy, type }: { sx: number; sy: number; type: SupportType }) {
+  const p = { sx, sy };
   if (type === "rollerX") {
     return (
       <g>
@@ -165,10 +174,10 @@ function SupportGlyph({ x, y, type }: { x: number; y: number; type: SupportType 
   );
 }
 
-function LoadArrow({ load, x, y }: { load: Load; x: number; y: number }) {
-  const mag = Math.hypot(load.fx, load.fy);
+function LoadArrow({ load, sx, sy }: { load: Load; sx: number; sy: number }) {
+  const mag = Math.hypot(load.fx, load.fy, load.fz ?? 0);
   if (mag < 0.05) return null;
-  const p = toScreen(x, y);
+  const p = { sx, sy };
   const sdx = load.fx / mag;
   const sdy = -load.fy / mag;
   const endx = p.sx - sdx * 16;
@@ -231,12 +240,60 @@ export function TrussBoard({
   const focusing = Boolean(focusMemberIds && focusMemberIds.length > 0);
   const pending = model.nodes.find((node) => node.id === pendingId);
   const svgRef = useRef<SVGSVGElement>(null);
+  const [cam, setCam] = useState<Camera>(HOME_CAMERA);
+  const camRef = useRef(cam);
+  const drag = useRef<{ x: number; y: number; cx: number; cy: number; moved: boolean } | null>(null);
+  useEffect(() => {
+    camRef.current = cam;
+  }, [cam]);
+
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      const current = camRef.current;
+      const point = fromClient(svg, event.clientX, event.clientY, current);
+      if (!point) return;
+      const zoom = clampZoom(current.zoom * (event.deltaY > 0 ? 0.9 : 1.12));
+      const scale = SCALE * zoom;
+      const next = {
+        zoom,
+        cx: point.x - (point.sx - VIEW_W / 2) / scale,
+        cy: point.y + (point.sy - VIEW_H / 2) / scale,
+      };
+      camRef.current = next;
+      setCam(next);
+    };
+    svg.addEventListener("wheel", onWheel, { passive: false });
+    return () => svg.removeEventListener("wheel", onWheel);
+  }, []);
 
   function pointFrom(event: { clientX: number; clientY: number }) {
     const svg = svgRef.current;
     if (!svg) return null;
-    return fromClient(svg, event.clientX, event.clientY);
+    return fromClient(svg, event.clientX, event.clientY, camRef.current);
   }
+
+  const step = snapStep(cam.zoom);
+  const span = VIEW_W / (SCALE * cam.zoom);
+  let lineStep = step;
+  while (span / lineStep > 48) lineStep *= 2;
+  const corners = [0, VIEW_W].flatMap((sx) => [0, VIEW_H].map((sy) => {
+    const scale = SCALE * cam.zoom;
+    return {
+      x: cam.cx + (sx - VIEW_W / 2) / scale,
+      y: cam.cy - (sy - VIEW_H / 2) / scale,
+    };
+  }));
+  const minX = Math.max(LIMIT.minX, Math.floor(Math.min(...corners.map((corner) => corner.x)) / lineStep) * lineStep);
+  const maxX = Math.min(LIMIT.maxX, Math.ceil(Math.max(...corners.map((corner) => corner.x)) / lineStep) * lineStep);
+  const minY = Math.max(LIMIT.minY, Math.floor(Math.min(...corners.map((corner) => corner.y)) / lineStep) * lineStep);
+  const maxY = Math.min(LIMIT.maxY, Math.ceil(Math.max(...corners.map((corner) => corner.y)) / lineStep) * lineStep);
+  const xs: number[] = [];
+  const ys: number[] = [];
+  for (let x = minX; x <= maxX + 1e-6; x = quantize(x + lineStep, lineStep)) xs.push(x);
+  for (let y = minY; y <= maxY + 1e-6; y = quantize(y + lineStep, lineStep)) ys.push(y);
 
   return (
     <div className={`board-shell ${compact ? "compact" : ""} ${tool === "select" ? "grab" : ""}`}>
@@ -244,42 +301,90 @@ export function TrussBoard({
         ref={svgRef}
         viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
         role="img"
-        aria-label="트러스 작업판"
-        onClick={(event) => {
+        aria-label="트러스 작업판. 휠로 확대하고, 빈 곳을 끌면 이동합니다."
+        onPointerDown={(event) => {
+          if (event.button !== 0 && event.button !== 1) return;
           const point = pointFrom(event);
           if (!point) return;
-          onLeft(hitTest(point, model));
+          const hit = hitTest(point, model, camRef.current);
+          if (event.button === 0 && (hit.nodeId || hit.memberId) && !event.shiftKey) return;
+          try {
+            event.currentTarget.setPointerCapture(event.pointerId);
+          } catch {
+            /* synthetic pointers have no active id */
+          }
+          drag.current = { x: event.clientX, y: event.clientY, cx: camRef.current.cx, cy: camRef.current.cy, moved: false };
+        }}
+        onPointerMove={(event) => {
+          const active = drag.current;
+          if (active) {
+            const dx = event.clientX - active.x;
+            const dy = event.clientY - active.y;
+            if (Math.hypot(dx, dy) > 4) active.moved = true;
+            if (active.moved) {
+              const svg = svgRef.current;
+              const rect = svg?.getBoundingClientRect();
+              const pixel = rect && svg ? svg.viewBox.baseVal.width / rect.width : 1;
+              const scale = SCALE * camRef.current.zoom;
+              const next = {
+                zoom: camRef.current.zoom,
+                cx: active.cx - (dx * pixel) / scale,
+                cy: active.cy + (dy * pixel) / scale,
+              };
+              camRef.current = next;
+              setCam(next);
+              return;
+            }
+          }
+          onMove(pointFrom(event));
+        }}
+        onPointerUp={(event) => {
+          const active = drag.current;
+          drag.current = null;
+          try {
+            if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+          } catch {
+            /* already released */
+          }
+          if (active?.moved) return;
+          if (event.button !== 0) return;
+          const point = pointFrom(event);
+          if (!point) return;
+          onLeft(hitTest(point, model, camRef.current));
         }}
         onContextMenu={(event) => {
           event.preventDefault();
           const point = pointFrom(event);
           if (!point) return;
-          onRight(hitTest(point, model), event.clientX, event.clientY);
+          onRight(hitTest(point, model, camRef.current), event.clientX, event.clientY);
         }}
-        onMouseMove={(event) => onMove(pointFrom(event))}
-        onMouseLeave={() => onMove(null)}
+        onPointerLeave={() => {
+          if (!drag.current) onMove(null);
+        }}
       >
         <Scene scene={scene} />
-        {Array.from({ length: WORLD_W + 1 }, (_, x) => (
-          <line key={`vx${x}`} x1={PAD + x * SCALE} y1={PAD} x2={PAD + x * SCALE} y2={VIEW_H - PAD} stroke="rgba(23,32,51,0.08)" />
+        {xs.map((x) => {
+          const a = toScreen(x, minY, cam);
+          const b = toScreen(x, maxY, cam);
+          return <line key={`vx${x}`} x1={a.sx} y1={a.sy} x2={b.sx} y2={b.sy} stroke="rgba(23,32,51,0.1)" />;
+        })}
+        {ys.map((y) => {
+          const a = toScreen(minX, y, cam);
+          const b = toScreen(maxX, y, cam);
+          return <line key={`hy${y}`} x1={a.sx} y1={a.sy} x2={b.sx} y2={b.sy} stroke="rgba(23,32,51,0.1)" />;
+        })}
+        {xs.filter((x) => Math.abs(x - Math.round(x)) < 0.001).map((x) => (
+          <text key={`lx${x}`} x={toScreen(x, 0, cam).sx} y={VIEW_H - 18} textAnchor="middle" fontSize="11" fill="#8b97a8">
+            {x}
+          </text>
         ))}
-        {Array.from({ length: WORLD_H + 1 }, (_, y) => (
-          <line key={`hy${y}`} x1={PAD} y1={PAD + y * SCALE} x2={VIEW_W - PAD} y2={PAD + y * SCALE} stroke="rgba(23,32,51,0.08)" />
-        ))}
-        {Array.from({ length: WORLD_W + 1 }, (_, x) =>
-          x % 2 === 0 ? (
-            <text key={`lx${x}`} x={PAD + x * SCALE} y={VIEW_H - 28} textAnchor="middle" fontSize="11" fill="#8b97a8">
-              {x}
-            </text>
-          ) : null,
-        )}
 
         {model.members.map((member) => {
           const a = model.nodes.find((node) => node.id === member.i);
           const b = model.nodes.find((node) => node.id === member.j);
           if (!a || !b) return null;
-          const as = toScreen(a.x, a.y);
-          const bs = toScreen(b.x, b.y);
+          const as = toScreen(a.x, a.y, cam);
+          const bs = toScreen(b.x, b.y, cam);
           const force = analysis?.forces.find((item) => item.memberId === member.id);
           const material = materialById(member.materialId);
           const color = force
@@ -329,10 +434,10 @@ export function TrussBoard({
 
         {pending && cursor && tool === "member" ? (
           <line
-            x1={toScreen(pending.x, pending.y).sx}
-            y1={toScreen(pending.x, pending.y).sy}
-            x2={toScreen(cursor.x, cursor.y).sx}
-            y2={toScreen(cursor.x, cursor.y).sy}
+            x1={toScreen(pending.x, pending.y, cam).sx}
+            y1={toScreen(pending.x, pending.y, cam).sy}
+            x2={toScreen(cursor.x, cursor.y, cam).sx}
+            y2={toScreen(cursor.x, cursor.y, cam).sy}
             stroke="#2f6bff"
             strokeWidth="2"
             strokeDasharray="5 5"
@@ -342,19 +447,21 @@ export function TrussBoard({
         {model.supports.map((support) => {
           const node = model.nodes.find((item) => item.id === support.nodeId);
           if (!node) return null;
-          return <SupportGlyph key={`s${support.nodeId}`} x={node.x} y={node.y} type={support.type} />;
+          const p = toScreen(node.x, node.y, cam);
+          return <SupportGlyph key={`s${support.nodeId}`} sx={p.sx} sy={p.sy} type={support.type} />;
         })}
 
         {drawnLoads.map((load, index) => {
           const node = model.nodes.find((item) => item.id === load.nodeId);
           if (!node) return null;
-          return <LoadArrow key={`l${load.nodeId}-${index}`} load={load} x={node.x} y={node.y} />;
+          const p = toScreen(node.x, node.y, cam);
+          return <LoadArrow key={`l${load.nodeId}-${index}`} load={load} sx={p.sx} sy={p.sy} />;
         })}
 
         {tool === "node" && cursor ? (
           <circle
-            cx={toScreen(clampGrid(cursor.x, cursor.y).x, clampGrid(cursor.x, cursor.y).y).sx}
-            cy={toScreen(clampGrid(cursor.x, cursor.y).x, clampGrid(cursor.x, cursor.y).y).sy}
+            cx={toScreen(clampGrid(cursor.x, cursor.y, cam.zoom).x, clampGrid(cursor.x, cursor.y, cam.zoom).y, cam).sx}
+            cy={toScreen(clampGrid(cursor.x, cursor.y, cam.zoom).x, clampGrid(cursor.x, cursor.y, cam.zoom).y, cam).sy}
             r="7"
             fill="rgba(47,107,255,0.16)"
             stroke="#2f6bff"
@@ -362,7 +469,7 @@ export function TrussBoard({
         ) : null}
 
         {model.nodes.map((node) => {
-          const p = toScreen(node.x, node.y);
+          const p = toScreen(node.x, node.y, cam);
           const on = node.id === focusNodeId || node.id === pendingId;
           return (
             <g key={node.id}>
@@ -374,6 +481,12 @@ export function TrussBoard({
           );
         })}
       </svg>
+      <ZoomBar
+        zoom={cam.zoom}
+        step={step}
+        onZoom={(next) => setCam((current) => ({ ...current, zoom: clampZoom(next) }))}
+        onReset={() => setCam(HOME_CAMERA)}
+      />
     </div>
   );
 }

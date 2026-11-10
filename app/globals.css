@@ -255,12 +255,42 @@ a { color: inherit; text-decoration: none; }
 .swatch { width: 14px; height: 14px; border-radius: 99px; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.12); }
 
 .board-shell {
+  position: relative;
   background: white;
   border: 1px solid #e6ebf3;
   border-radius: 18px;
   overflow: hidden;
   box-shadow: var(--shadow);
 }
+
+.zoom-bar {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid #e6ebf3;
+  box-shadow: 0 8px 24px rgba(23, 32, 51, 0.08);
+}
+
+.zoom-bar button, .height-field input, .segmented button {
+  border: 1px solid #e6ebf3;
+  background: white;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-weight: 800;
+  color: #172033;
+}
+
+.zoom-bar button:hover, .segmented button.on { background: #172033; color: white; }
+.zoom-bar span { padding: 0 8px; color: #5d6b80; font-size: 12px; font-weight: 800; }
+.segmented { display: inline-flex; gap: 4px; }
+.height-field { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 800; color: #5d6b80; }
+.height-field input { width: 64px; }
 
 .board-shell { display: flex; justify-content: center; }
 .board-shell svg {

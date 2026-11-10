@@ -1,4 +1,4 @@
-export type Node = { id: number; x: number; y: number };
+export type Node = { id: number; x: number; y: number; z?: number };
 
 export type Member = {
   id: number;
@@ -7,11 +7,11 @@ export type Member = {
   materialId: string;
 };
 
-export type SupportType = "pin" | "rollerY" | "rollerX";
+export type SupportType = "pin" | "rollerY" | "rollerX" | "ball" | "slot";
 
 export type Support = { nodeId: number; type: SupportType };
 
-export type Load = { nodeId: number; fx: number; fy: number; label?: string };
+export type Load = { nodeId: number; fx: number; fy: number; fz?: number; label?: string };
 
 export type Model = {
   nodes: Node[];
@@ -72,7 +72,8 @@ export type Analysis = {
   j: number;
   degree: number;
   method: "joints" | "stiffness" | "none";
-  reactions: { nodeId: number; rx: number; ry: number }[];
+  reactions: { nodeId: number; rx: number; ry: number; rz?: number }[];
+  space?: boolean;
   forces: MemberForce[];
   steps: SolutionStep[];
   maxRatio: number;

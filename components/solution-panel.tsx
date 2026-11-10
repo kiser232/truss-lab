@@ -57,7 +57,8 @@ export function SolutionPanel({
         {kicker ? <span className="badge">{kicker}</span> : null}
         <span className={`badge ${badgeClass}`}>{analysis.status === "ok" ? "견딤" : analysis.status === "overstressed" ? "파괴" : analysis.message}</span>
         <span className="badge">
-          {det} {analysis.m}+{analysis.r}={analysis.m + analysis.r} · 2j={analysis.j * 2}
+          {det} {analysis.m}+{analysis.r}={analysis.m + analysis.r} · {analysis.space ? "3j" : "2j"}=
+          {analysis.j * (analysis.space ? 3 : 2)}
         </span>
       </div>
       {typeof cost === "number" && typeof budget === "number" ? (
@@ -103,12 +104,13 @@ export function SolutionPanel({
 
       <div className="chips">
         {analysis.reactions
-          .filter((reaction) => Math.hypot(reaction.rx, reaction.ry) > 0.05)
+          .filter((reaction) => Math.hypot(reaction.rx, reaction.ry, reaction.rz ?? 0) > 0.05)
           .map((reaction) => {
             const tag = nodeTag(analysis, reaction.nodeId);
             const bits = [
               Math.abs(reaction.rx) > 0.05 ? `${tag}x ${signed(reaction.rx)}` : "",
               Math.abs(reaction.ry) > 0.05 ? `${tag}y ${signed(reaction.ry)}` : "",
+              Math.abs(reaction.rz ?? 0) > 0.05 ? `${tag}z ${signed(reaction.rz ?? 0)}` : "",
             ].filter(Boolean);
             return (
               <span key={reaction.nodeId} className="chip">
