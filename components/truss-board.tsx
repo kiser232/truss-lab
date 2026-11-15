@@ -105,11 +105,25 @@ export function hitTest(point: WorldPoint, model: Model, cam: Camera = HOME_CAME
   return { nodeId, memberId, world: { x: point.x, y: point.y }, grid };
 }
 
-function Scene({ scene }: { scene: "paper" | "valley" | "road" | "cliff" | "desk" }) {
+const SCENE_SKY = {
+  paper: "#f7f8fb",
+  valley: "#e7f3ea",
+  road: "#e7f2fb",
+  cliff: "#e7f1f6",
+  desk: "#f6f1e7",
+} as const;
+
+function sceneShift(cam: Camera) {
+  const zoom = cam.zoom;
+  const tx = (VIEW_W / 2) * (1 - zoom) + (HOME_CAMERA.cx - cam.cx) * SCALE * zoom;
+  const ty = (VIEW_H / 2) * (1 - zoom) - (HOME_CAMERA.cy - cam.cy) * SCALE * zoom;
+  return `translate(${tx} ${ty}) scale(${zoom})`;
+}
+
+function SceneArt({ scene }: { scene: keyof typeof SCENE_SKY }) {
   if (scene === "valley") {
     return (
       <g>
-        <rect width={VIEW_W} height={VIEW_H} fill="#e7f3ea" />
         <path d={`M0 ${VIEW_H * 0.42} C 180 ${VIEW_H * 0.3}, 280 ${VIEW_H * 0.5}, ${VIEW_W} ${VIEW_H * 0.34} L ${VIEW_W} ${VIEW_H} L 0 ${VIEW_H} Z`} fill="#d5e7cf" />
         <path d="M70 430 L250 390 L250 620 L40 620 Z" fill="#7ea36a" />
         <path d={`M${VIEW_W - 70} 430 L${VIEW_W - 250} 390 L${VIEW_W - 250} 620 L${VIEW_W - 40} 620 Z`} fill="#6f9860" />
@@ -120,7 +134,6 @@ function Scene({ scene }: { scene: "paper" | "valley" | "road" | "cliff" | "desk
   if (scene === "road") {
     return (
       <g>
-        <rect width={VIEW_W} height={VIEW_H} fill="#e7f2fb" />
         <rect x="0" y={VIEW_H - 118} width={VIEW_W} height="46" fill="#d7c4a2" />
         <rect x="0" y={VIEW_H - 78} width={VIEW_W} height="78" fill="#4e5966" />
         <line x1="30" y1={VIEW_H - 40} x2={VIEW_W - 30} y2={VIEW_H - 40} stroke="rgba(255,255,255,0.75)" strokeWidth="4" strokeDasharray="22 16" />
@@ -130,7 +143,6 @@ function Scene({ scene }: { scene: "paper" | "valley" | "road" | "cliff" | "desk
   if (scene === "cliff") {
     return (
       <g>
-        <rect width={VIEW_W} height={VIEW_H} fill="#e7f1f6" />
         <path d={`M0 0 H150 L120 180 L160 300 L110 460 L150 ${VIEW_H} H0 Z`} fill="#8d8478" />
         <path d={`M150 ${VIEW_H * 0.62} C 360 ${VIEW_H * 0.5}, 640 ${VIEW_H * 0.7}, ${VIEW_W} ${VIEW_H * 0.56} L ${VIEW_W} ${VIEW_H} L 150 ${VIEW_H} Z`} fill="#d5e4ea" />
       </g>
@@ -139,14 +151,24 @@ function Scene({ scene }: { scene: "paper" | "valley" | "road" | "cliff" | "desk
   if (scene === "desk") {
     return (
       <g>
-        <rect width={VIEW_W} height={VIEW_H} fill="#f6f1e7" />
         <rect x="36" y={VIEW_H - 150} width={VIEW_W - 72} height="92" rx="8" fill="#e7d3ae" />
         <rect x="70" y={VIEW_H - 58} width="16" height="58" fill="#c4a574" />
         <rect x={VIEW_W - 86} y={VIEW_H - 58} width="16" height="58" fill="#c4a574" />
       </g>
     );
   }
-  return <rect width={VIEW_W} height={VIEW_H} fill="#f7f8fb" />;
+  return null;
+}
+
+function Scene({ scene, cam }: { scene: keyof typeof SCENE_SKY; cam: Camera }) {
+  return (
+    <g>
+      <rect width={VIEW_W} height={VIEW_H} fill={SCENE_SKY[scene]} />
+      <g data-scene="world" transform={sceneShift(cam)}>
+        <SceneArt scene={scene} />
+      </g>
+    </g>
+  );
 }
 
 function SupportGlyph({ sx, sy, type, angle, hot }: { sx: number; sy: number; type: SupportType; angle?: number; hot?: boolean }) {
@@ -407,7 +429,7 @@ export function TrussBoard({
           if (!drag.current) onMove(null);
         }}
       >
-        <Scene scene={scene} />
+        <Scene scene={scene} cam={cam} />
         {xs.map((x) => {
           const a = toScreen(x, minY, cam);
           const b = toScreen(x, maxY, cam);
