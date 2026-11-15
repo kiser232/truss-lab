@@ -231,7 +231,7 @@ function ScratchPad({ note }: { note: string }) {
         onChange={setModel}
         materials={LAB_MATERIALS}
         analysis={visible}
-        tools={["select", "node", "member", "pin", "rollerY", "rollerX", "load", "erase"]}
+        tools={["select", "node", "member", "pin", "rollerY", "load", "erase"]}
         scene="paper"
       />
     </div>

@@ -6,8 +6,9 @@ import { signed } from "@/lib/format";
 import { materialById } from "@/lib/materials";
 import { clampZoom, quantize, snapStep } from "@/lib/view";
 import type { Analysis, Model, SupportType } from "@/lib/types";
+import { canTurn, supportAngle } from "@/lib/support";
 import type { Hit } from "./truss-board";
-import { VIEW_H, VIEW_W } from "./truss-board";
+import { RotateChip, VIEW_H, VIEW_W } from "./truss-board";
 import { ZoomBar } from "./zoom-bar";
 
 const SCALE = 42;
@@ -74,6 +75,7 @@ export function SpaceBoard({
   focusMemberIds,
   onLeft,
   onRight,
+  onRotate,
 }: {
   model: Model;
   analysis: Analysis | null;
@@ -85,6 +87,7 @@ export function SpaceBoard({
   focusMemberIds?: number[];
   onLeft: (hit: Hit) => void;
   onRight: (hit: Hit, clientX: number, clientY: number) => void;
+  onRotate?: (nodeId: number) => void;
 }) {
   const [camera, setCamera] = useState<Camera>(HOME);
   const cameraRef = useRef(camera);
@@ -93,6 +96,16 @@ export function SpaceBoard({
   }, [camera]);
   const svgRef = useRef<SVGSVGElement>(null);
   const drag = useRef<{ x: number; y: number; yaw: number; pitch: number; panX: number; panY: number; moved: boolean; pan: boolean } | null>(null);
+  const [hoverSupport, setHoverSupport] = useState<number | null>(null);
+  const hideSupport = useRef<number | null>(null);
+  function holdSupport(nodeId: number) {
+    if (hideSupport.current) window.clearTimeout(hideSupport.current);
+    setHoverSupport(nodeId);
+  }
+  function releaseSupport() {
+    if (hideSupport.current) window.clearTimeout(hideSupport.current);
+    hideSupport.current = window.setTimeout(() => setHoverSupport(null), 700);
+  }
   const [hover, setHover] = useState<{ x: number; z: number } | null>(null);
 
   useEffect(() => {
@@ -315,7 +328,16 @@ export function SpaceBoard({
           const node = model.nodes.find((item) => item.id === support.nodeId);
           if (!node) return null;
           const screen = project(node.x, node.y, node.z ?? 0, camera);
-          return <SpaceSupport key={support.nodeId} sx={screen.sx} sy={screen.sy} type={support.type} />;
+          const turnable = Boolean(onRotate) && canTurn(support.type);
+          return (
+            <g
+              key={support.nodeId}
+              onPointerEnter={turnable ? () => holdSupport(support.nodeId) : undefined}
+              onPointerLeave={turnable ? releaseSupport : undefined}
+            >
+              <SpaceSupport sx={screen.sx} sy={screen.sy} type={support.type} angle={support.angle} hot={turnable} />
+            </g>
+          );
         })}
         {model.loads.map((load) => {
           const node = model.nodes.find((item) => item.id === load.nodeId);
@@ -368,6 +390,26 @@ export function SpaceBoard({
               </g>
             );
           })}
+        {onRotate && hoverSupport !== null
+          ? model.supports
+              .filter((support) => support.nodeId === hoverSupport && canTurn(support.type))
+              .map((support) => {
+                const node = model.nodes.find((item) => item.id === support.nodeId);
+                if (!node) return null;
+                const screen = project(node.x, node.y, node.z ?? 0, camera);
+                return (
+                  <RotateChip
+                    key={`turn-${support.nodeId}`}
+                    sx={screen.sx}
+                    sy={screen.sy}
+                    angle={supportAngle(support)}
+                    onHold={() => holdSupport(support.nodeId)}
+                    onRelease={releaseSupport}
+                    onRotate={() => onRotate(support.nodeId)}
+                  />
+                );
+              })
+          : null}
         <text x="24" y={VIEW_H - 18} fontSize="12" fill="#5d6b80">
           끌면 회전 · Shift 끌면 이동 · x 경간 · y 높이 · z 깊이
         </text>
@@ -382,25 +424,29 @@ function PendingLine({ pending, camera }: { pending: { x: number; y: number; z?:
   return <circle cx={from.sx} cy={from.sy} r="12" fill="none" stroke="#2f6bff" strokeWidth="2" />;
 }
 
-function SpaceSupport({ sx, sy, type }: { sx: number; sy: number; type: SupportType }) {
-  if (type === "slot") {
-    return (
+function SpaceSupport({ sx, sy, type, angle, hot }: { sx: number; sy: number; type: SupportType; angle?: number; hot?: boolean }) {
+  const turn = supportAngle({ type, angle });
+  const body =
+    type === "slot" ? (
       <g stroke="#172033" strokeWidth="1.8">
         <line x1={sx - 10} y1={sy + 14} x2={sx + 10} y2={sy + 14} />
         <line x1={sx - 10} y1={sy + 20} x2={sx + 10} y2={sy + 20} />
       </g>
-    );
-  }
-  if (type === "rollerY") {
-    return (
+    ) : type === "rollerY" || type === "rollerX" ? (
       <g stroke="#172033" fill="none" strokeWidth="1.6">
         <polygon points={`${sx},${sy + 8} ${sx - 10},${sy + 22} ${sx + 10},${sy + 22}`} fill="#172033" stroke="none" />
         <circle cx={sx - 5} cy={sy + 28} r="3" />
         <circle cx={sx + 5} cy={sy + 28} r="3" />
       </g>
+    ) : (
+      <circle cx={sx} cy={sy + 16} r="6" fill={type === "ball" ? "#172033" : "none"} stroke="#172033" strokeWidth="1.6" />
     );
-  }
-  return <circle cx={sx} cy={sy + 16} r="6" fill={type === "ball" ? "#172033" : "none"} stroke="#172033" strokeWidth="1.6" />;
+  return (
+    <g transform={`rotate(${turn} ${sx} ${sy})`}>
+      {hot ? <circle cx={sx} cy={sy + 16} r="22" fill="transparent" /> : null}
+      {body}
+    </g>
+  );
 }
 
 function AxisLegend({ camera }: { camera: Camera }) {

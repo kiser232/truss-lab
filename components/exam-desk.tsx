@@ -96,7 +96,7 @@ export function ExamDesk({
           onChange={setModel}
           materials={LAB_MATERIALS}
           analysis={visible}
-          tools={["select", "node", "member", "pin", "rollerY", "rollerX", "load", "erase"]}
+          tools={["select", "node", "member", "pin", "rollerY", "load", "erase"]}
           scene="paper"
           space={isSpaceModel(model)}
           focusNodeId={focus?.focusNodeId}

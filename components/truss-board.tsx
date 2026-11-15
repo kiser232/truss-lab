@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { nodeLabel } from "@/lib/analyze";
 import { materialById } from "@/lib/materials";
 import { signed } from "@/lib/format";
+import { canTurn, supportAngle } from "@/lib/support";
 import { clampZoom, quantize, snapStep } from "@/lib/view";
 import type { Analysis, Load, Model, SupportType } from "@/lib/types";
 import { ZoomBar } from "./zoom-bar";
@@ -148,28 +149,60 @@ function Scene({ scene }: { scene: "paper" | "valley" | "road" | "cliff" | "desk
   return <rect width={VIEW_W} height={VIEW_H} fill="#f7f8fb" />;
 }
 
-function SupportGlyph({ sx, sy, type }: { sx: number; sy: number; type: SupportType }) {
-  const p = { sx, sy };
-  if (type === "rollerX") {
-    return (
-      <g>
-        <polygon points={`${p.sx - 8},${p.sy} ${p.sx - 24},${p.sy - 11} ${p.sx - 24},${p.sy + 11}`} fill="#172033" />
-        <circle cx={p.sx - 30} cy={p.sy - 6} r="3.2" fill="none" stroke="#172033" strokeWidth="1.6" />
-        <circle cx={p.sx - 30} cy={p.sy + 6} r="3.2" fill="none" stroke="#172033" strokeWidth="1.6" />
-      </g>
-    );
-  }
+function SupportGlyph({ sx, sy, type, angle, hot }: { sx: number; sy: number; type: SupportType; angle?: number; hot?: boolean }) {
+  const turn = supportAngle({ type, angle });
+  const roller = type === "rollerY" || type === "rollerX";
   return (
-    <g>
-      <polygon points={`${p.sx},${p.sy + 7} ${p.sx - 11},${p.sy + 24} ${p.sx + 11},${p.sy + 24}`} fill="#172033" />
-      {type === "rollerY" ? (
+    <g transform={`rotate(${turn} ${sx} ${sy})`}>
+      {hot ? <circle cx={sx} cy={sy + 18} r="24" fill="transparent" /> : null}
+      <polygon points={`${sx},${sy + 7} ${sx - 11},${sy + 24} ${sx + 11},${sy + 24}`} fill="#172033" />
+      {roller ? (
         <g>
-          <circle cx={p.sx - 6} cy={p.sy + 30} r="3.2" fill="none" stroke="#172033" strokeWidth="1.6" />
-          <circle cx={p.sx + 6} cy={p.sy + 30} r="3.2" fill="none" stroke="#172033" strokeWidth="1.6" />
+          <circle cx={sx - 6} cy={sy + 30} r="3.2" fill="none" stroke="#172033" strokeWidth="1.6" />
+          <circle cx={sx + 6} cy={sy + 30} r="3.2" fill="none" stroke="#172033" strokeWidth="1.6" />
         </g>
       ) : (
-        <line x1={p.sx - 14} y1={p.sy + 28} x2={p.sx + 14} y2={p.sy + 28} stroke="#172033" strokeWidth="1.6" />
+        <line x1={sx - 14} y1={sy + 28} x2={sx + 14} y2={sy + 28} stroke="#172033" strokeWidth="1.6" />
       )}
+    </g>
+  );
+}
+
+export function RotateChip({
+  sx,
+  sy,
+  angle,
+  onRotate,
+  onHold,
+  onRelease,
+}: {
+  sx: number;
+  sy: number;
+  angle: number;
+  onRotate: () => void;
+  onHold: () => void;
+  onRelease: () => void;
+}) {
+  const rad = (angle * Math.PI) / 180;
+  const x = sx + Math.sin(rad) * 52;
+  const y = sy - Math.cos(rad) * 52;
+  return (
+    <g
+      transform={`translate(${x} ${y})`}
+      style={{ cursor: "pointer" }}
+      onPointerEnter={onHold}
+      onPointerLeave={onRelease}
+      onPointerDown={(event) => event.stopPropagation()}
+      onPointerUp={(event) => {
+        event.stopPropagation();
+        event.preventDefault();
+        onRotate();
+      }}
+    >
+      <rect x="-28" y="-14" width="56" height="28" rx="14" fill="white" stroke="#c5d0de" />
+      <text y="4" textAnchor="middle" fontSize="12" fontWeight="800" fill="#172033">
+        회전
+      </text>
     </g>
   );
 }
@@ -221,6 +254,7 @@ export function TrussBoard({
   onLeft,
   onRight,
   onMove,
+  onRotate,
 }: {
   model: Model;
   loads?: Load[];
@@ -235,6 +269,7 @@ export function TrussBoard({
   onLeft: (hit: Hit) => void;
   onRight: (hit: Hit, clientX: number, clientY: number) => void;
   onMove: (point: WorldPoint | null) => void;
+  onRotate?: (nodeId: number) => void;
 }) {
   const drawnLoads = loads ?? model.loads;
   const focusing = Boolean(focusMemberIds && focusMemberIds.length > 0);
@@ -243,6 +278,16 @@ export function TrussBoard({
   const [cam, setCam] = useState<Camera>(HOME_CAMERA);
   const camRef = useRef(cam);
   const drag = useRef<{ x: number; y: number; cx: number; cy: number; moved: boolean } | null>(null);
+  const [hoverSupport, setHoverSupport] = useState<number | null>(null);
+  const hideSupport = useRef<number | null>(null);
+  function holdSupport(nodeId: number) {
+    if (hideSupport.current) window.clearTimeout(hideSupport.current);
+    setHoverSupport(nodeId);
+  }
+  function releaseSupport() {
+    if (hideSupport.current) window.clearTimeout(hideSupport.current);
+    hideSupport.current = window.setTimeout(() => setHoverSupport(null), 700);
+  }
   useEffect(() => {
     camRef.current = cam;
   }, [cam]);
@@ -448,7 +493,16 @@ export function TrussBoard({
           const node = model.nodes.find((item) => item.id === support.nodeId);
           if (!node) return null;
           const p = toScreen(node.x, node.y, cam);
-          return <SupportGlyph key={`s${support.nodeId}`} sx={p.sx} sy={p.sy} type={support.type} />;
+          const turnable = Boolean(onRotate) && canTurn(support.type);
+          return (
+            <g
+              key={`s${support.nodeId}`}
+              onPointerEnter={turnable ? () => holdSupport(support.nodeId) : undefined}
+              onPointerLeave={turnable ? releaseSupport : undefined}
+            >
+              <SupportGlyph sx={p.sx} sy={p.sy} type={support.type} angle={support.angle} hot={turnable} />
+            </g>
+          );
         })}
 
         {drawnLoads.map((load, index) => {
@@ -480,6 +534,27 @@ export function TrussBoard({
             </g>
           );
         })}
+
+        {onRotate && hoverSupport !== null
+          ? model.supports
+              .filter((support) => support.nodeId === hoverSupport && canTurn(support.type))
+              .map((support) => {
+                const node = model.nodes.find((item) => item.id === support.nodeId);
+                if (!node) return null;
+                const p = toScreen(node.x, node.y, cam);
+                return (
+                  <RotateChip
+                    key={`turn-${support.nodeId}`}
+                    sx={p.sx}
+                    sy={p.sy}
+                    angle={supportAngle(support)}
+                    onHold={() => holdSupport(support.nodeId)}
+                    onRelease={releaseSupport}
+                    onRotate={() => onRotate(support.nodeId)}
+                  />
+                );
+              })
+          : null}
       </svg>
       <ZoomBar
         zoom={cam.zoom}

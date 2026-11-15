@@ -64,7 +64,7 @@ export default function LabPage() {
           }}
           materials={LAB_MATERIALS}
           analysis={analysis.status === "unstable" || analysis.status === "invalid" || analysis.status === "empty" ? null : analysis}
-          tools={["select", "node", "member", "pin", "rollerY", "rollerX", "load", "erase"]}
+          tools={["select", "node", "member", "pin", "rollerY", "load", "erase"]}
           scene="paper"
           space={space}
           onSpace={(next) => {
@@ -82,7 +82,7 @@ export default function LabPage() {
         @media (max-width: 980px) { .lab-grid { grid-template-columns: 1fr; } }
       `}</style>
       <p className="note" style={{ marginTop: 8 }}>
-        부재를 이을 때 우클릭으로 자재. + 인장 · − 압축. 휠로 확대하면 격자 간격이 0.25m, 0.1m, 0.05m까지 줄어듭니다. 3D는 바닥의 x·z와 높이 y를 씁니다.
+        좌표에 x, y를 넣고 넣기를 누르면 절점이 생깁니다. 핀이나 롤러에 커서를 올리면 회전이 나오고, 롤러는 한 번 돌릴 때마다 바닥 롤러와 가로 롤러가 바뀝니다. 우클릭으로 자재. + 인장 · − 압축.
       </p>
     </main>
   );

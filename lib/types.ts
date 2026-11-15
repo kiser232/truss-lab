@@ -9,7 +9,7 @@ export type Member = {
 
 export type SupportType = "pin" | "rollerY" | "rollerX" | "ball" | "slot";
 
-export type Support = { nodeId: number; type: SupportType };
+export type Support = { nodeId: number; type: SupportType; angle?: number };
 
 export type Load = { nodeId: number; fx: number; fy: number; fz?: number; label?: string };
 

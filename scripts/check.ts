@@ -1,6 +1,7 @@
 import { analyze, memberName } from "../lib/analyze";
 import { correctText, EXAMS } from "../lib/exams";
 import { TRIPOD } from "../lib/space";
+import { rotateSupport, supportAngle } from "../lib/support";
 import { gradeMission, missionCases } from "../lib/grade";
 import { compressionAllow, CONTEST_MATERIALS, LAB_MATERIALS, materialById } from "../lib/materials";
 import { MISSIONS } from "../lib/missions";
@@ -205,6 +206,12 @@ const n2024 = analyze(EXAMS.find((problem) => problem.id === "2024-n")!.model);
 near(n2024.forces.find((force) => force.name === "AC")!.axial, 2, 0.02);
 near(n2024.forces.find((force) => force.name === "AB")!.axial, -1.732, 0.02);
 console.log("exams", EXAMS.length);
+const floor = rotateSupport({ nodeId: 1, type: "rollerY" });
+assert(floor.type === "rollerX" && supportAngle(floor) === 90, "roller turns sideways");
+const pin = rotateSupport({ nodeId: 1, type: "pin" });
+assert(pin.type === "pin" && supportAngle(pin) === 90, "pin keeps both restraints");
+const up = rotateSupport(floor);
+assert(up.type === "rollerY" && supportAngle(up) === 180, "second turn stands the roller up");
 
 if (failed) {
   console.error(`\n${failed} missions failed`);

@@ -122,7 +122,7 @@ function JointRound({
           onChange={setModel}
           materials={LAB_MATERIALS}
           analysis={visible}
-          tools={["select", "node", "member", "pin", "rollerY", "rollerX", "load", "erase"]}
+          tools={["select", "node", "member", "pin", "rollerY", "load", "erase"]}
           scene="paper"
           focusNodeId={focus?.focusNodeId}
           focusMemberIds={focus?.memberIds}

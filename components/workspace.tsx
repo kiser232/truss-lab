@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { memberName } from "@/lib/analyze";
 import { compressionAllow } from "@/lib/materials";
+import { rotateSupport } from "@/lib/support";
 import { quantize } from "@/lib/view";
 import type { Analysis, Load, Material, Model, SupportType } from "@/lib/types";
 import { SpaceBoard } from "./space-board";
-import { TrussBoard, type Hit, type WorldPoint } from "./truss-board";
+import { LIMIT, TrussBoard, type Hit, type WorldPoint } from "./truss-board";
 
 export type Tool = "select" | "node" | "member" | "pin" | "rollerY" | "rollerX" | "ball" | "slot" | "load" | "erase";
 
@@ -81,7 +82,9 @@ export function Workspace({
   const [newton, setNewton] = useState(60);
   const [height, setHeight] = useState("2");
   const [selected, setSelected] = useState<{ kind: "node" | "member"; id: number } | null>(null);
-  const activeTools = space ? SPACE_TOOLS : tools;
+  const activeTools = (space ? SPACE_TOOLS : tools).filter((item) => item !== "rollerX");
+  const [coord, setCoord] = useState({ x: "", y: "", z: "" });
+  const [coordNote, setCoordNote] = useState("");
   const material = materials.find((item) => item.id === materialId) ?? materials[0];
   const activeMaterialId = material?.id ?? materialId;
 
@@ -129,6 +132,41 @@ export function Workspace({
       ...model,
       supports: [...model.supports.filter((support) => support.nodeId !== nodeId), { nodeId, type }],
     });
+  }
+
+  function turnSupport(nodeId: number) {
+    if (lockSupports || readOnly) return;
+    onChange({
+      ...model,
+      supports: model.supports.map((support) => (support.nodeId === nodeId ? rotateSupport(support) : support)),
+    });
+  }
+
+  function addNodeByCoord(event: FormEvent) {
+    event.preventDefault();
+    const x = readCoord(coord.x);
+    const y = readCoord(coord.y);
+    const z = readCoord(coord.z);
+    if (x === null || y === null || (space && z === null)) {
+      setCoordNote(space ? "x, y, z를 숫자로 입력하세요." : "x, y를 숫자로 입력하세요.");
+      return;
+    }
+    const raw = { x: quantize(x, 0.001), y: quantize(y, 0.001), z: quantize(z ?? 0, 0.001) };
+    const point = space
+      ? { x: clampNum(raw.x, -16, 24), y: clampNum(raw.y, 0, 16), z: clampNum(raw.z, -16, 16) }
+      : { x: clampNum(raw.x, LIMIT.minX, LIMIT.maxX), y: clampNum(raw.y, LIMIT.minY, LIMIT.maxY), z: undefined as number | undefined };
+    const placedZ = point.z ?? 0;
+    const moved = point.x !== raw.x || point.y !== raw.y || (space && placedZ !== raw.z);
+    const occupied = model.nodes.some((node) => Math.hypot(node.x - point.x, node.y - point.y, (node.z ?? 0) - placedZ) < 0.02);
+    if (occupied) {
+      setCoordNote("그 좌표에 절점이 있습니다.");
+      return;
+    }
+    onChange({
+      ...model,
+      nodes: [...model.nodes, { id: maxId(model) + 1, x: point.x, y: point.y, ...(space ? { z: placedZ } : {}) }],
+    });
+    setCoordNote(moved ? "판 안으로 맞춰 절점을 넣었습니다." : "");
   }
 
   function onLeft(hit: Hit) {
@@ -294,6 +332,18 @@ export function Workspace({
               />
             </label>
           ) : null}
+          {activeTools.includes("node") ? (
+            <form className="coord-field" onSubmit={addNodeByCoord}>
+              <span>좌표</span>
+              <input aria-label="절점 x" placeholder="x" inputMode="decimal" value={coord.x} onChange={(event) => setCoord({ ...coord, x: event.target.value })} />
+              <input aria-label="절점 y" placeholder="y" inputMode="decimal" value={coord.y} onChange={(event) => setCoord({ ...coord, y: event.target.value })} />
+              {space ? (
+                <input aria-label="절점 z" placeholder="z" inputMode="decimal" value={coord.z} onChange={(event) => setCoord({ ...coord, z: event.target.value })} />
+              ) : null}
+              <button type="submit" className="tool">넣기</button>
+              {coordNote ? <small>{coordNote}</small> : null}
+            </form>
+          ) : null}
           {tool === "load" ? (
             <span className="row-tools">
               {[20, 40, 60, 80, 100].map((value) => (
@@ -317,6 +367,7 @@ export function Workspace({
           focusMemberIds={focusMemberIds}
           onLeft={onLeft}
           onRight={onRight}
+          onRotate={readOnly || lockSupports ? undefined : turnSupport}
         />
       ) : (
         <TrussBoard
@@ -332,6 +383,7 @@ export function Workspace({
           onLeft={onLeft}
           onRight={onRight}
           onMove={(point: WorldPoint | null) => setCursor(point ? { x: point.x, y: point.y } : null)}
+          onRotate={readOnly || lockSupports ? undefined : turnSupport}
         />
       )}
 
@@ -381,6 +433,15 @@ export function Workspace({
       ) : null}
     </div>
   );
+}
+
+function readCoord(text: string) {
+  const value = Number(text.trim().replace(",", "."));
+  return text.trim() === "" || !Number.isFinite(value) ? null : value;
+}
+
+function clampNum(value: number, min: number, max: number) {
+  return quantize(Math.min(max, Math.max(min, value)), 0.001);
 }
 
 function lengthOf(model: Model, member: Model["members"][number]) {
