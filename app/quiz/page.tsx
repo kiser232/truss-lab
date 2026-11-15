@@ -3,11 +3,12 @@
 import { useMemo, useState, useSyncExternalStore } from "react";
 import { analyze } from "@/lib/analyze";
 import { CONCEPTS, jointProblems, type Choice } from "@/lib/quiz";
-import { QUIZ_MATERIALS } from "@/lib/materials";
+import { LAB_MATERIALS, QUIZ_MATERIALS } from "@/lib/materials";
 import { gradeAnswer, useWrongs } from "@/lib/memory";
-import { TrussBoard } from "@/components/truss-board";
 import { SolutionPanel } from "@/components/solution-panel";
+import { Workspace } from "@/components/workspace";
 import { WrongBook } from "@/components/wrong-book";
+import type { Model } from "@/lib/types";
 
 type Tab = "joint" | "material" | "concept" | "wrongs";
 
@@ -59,13 +60,38 @@ export default function QuizPage() {
 function JointQuiz() {
   const problems = useMemo(() => jointProblems(), []);
   const [index, setIndex] = useState(0);
+  const problem = problems[index];
+  return (
+    <JointRound
+      key={problem.id}
+      index={index}
+      total={problems.length}
+      problem={problem}
+      onNext={() => setIndex((n) => (n + 1) % problems.length)}
+    />
+  );
+}
+
+function JointRound({
+  index,
+  total,
+  problem,
+  onNext,
+}: {
+  index: number;
+  total: number;
+  problem: ReturnType<typeof jointProblems>[number];
+  onNext: () => void;
+}) {
+  const [model, setModel] = useState<Model>(problem.model);
   const [picked, setPicked] = useState<number | null>(null);
   const [step, setStep] = useState<number | null>(null);
-  const problem = problems[index];
-  const analysis = analyze(problem.model);
+  const analysis = analyze(model);
+  const official = analyze(problem.model);
+  const visible = analysis.status === "unstable" || analysis.status === "invalid" || analysis.status === "empty" ? null : analysis;
   const revealed = picked !== null;
   const correct = problem.choices[picked ?? -1]?.ok;
-  const focus = step !== null ? analysis.steps[step] : undefined;
+  const focus = step !== null ? official.steps[step] : undefined;
 
   function choose(choice: number) {
     setPicked(choice);
@@ -83,48 +109,40 @@ function JointQuiz() {
     <div className="lab-grid">
       <div>
         <p style={{ fontWeight: 800, marginTop: 0 }}>
-          {index + 1}/{problems.length} · {problem.prompt}
+          {index + 1}/{total} · {problem.prompt}
         </p>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
           {problem.choices.map((choice, choiceIndex) => (
             <Option key={choice.text} choice={choice} index={choiceIndex} picked={picked} onPick={choose} />
           ))}
         </div>
-        <div style={{ marginTop: 10 }}>
-          <TrussBoard
-            model={problem.model}
-            analysis={revealed ? analysis : null}
-            scene="paper"
-            compact
-            pendingId={null}
-            cursor={null}
-            tool="select"
-            focusNodeId={focus?.focusNodeId}
-            focusMemberIds={focus?.memberIds}
-            onLeft={() => undefined}
-            onRight={() => undefined}
-            onMove={() => undefined}
-          />
+        <p className="note">계산기 숫자와 같은 보기를 고르세요. 배치를 고쳐 다시 계산할 수 있습니다.</p>
+        <Workspace
+          model={model}
+          onChange={setModel}
+          materials={LAB_MATERIALS}
+          analysis={visible}
+          tools={["select", "node", "member", "pin", "rollerY", "rollerX", "load", "erase"]}
+          scene="paper"
+          focusNodeId={focus?.focusNodeId}
+          focusMemberIds={focus?.memberIds}
+        />
+        <div className="row-tools" style={{ marginTop: 8 }}>
+          <button type="button" className="ghost" onClick={() => setModel(problem.model)}>
+            문제 배치로
+          </button>
         </div>
         {revealed ? (
           <div className="row-tools" style={{ marginTop: 10 }}>
             <strong style={{ color: correct ? "#157a3a" : "#be123c" }}>{correct ? "맞음" : "다시"}</strong>
-            <button
-              type="button"
-              className="primary-btn"
-              onClick={() => {
-                setIndex((n) => (n + 1) % problems.length);
-                setPicked(null);
-                setStep(null);
-              }}
-            >
+            <button type="button" className="primary-btn" onClick={onNext}>
               다음
             </button>
           </div>
         ) : null}
       </div>
       {revealed ? (
-        <SolutionPanel analysis={analysis} active={step} onPick={setStep} kicker="풀이" />
+        <SolutionPanel analysis={official} active={step} onPick={setStep} kicker="풀이" />
       ) : (
         <aside className="panel solution">
           <div className="badge">풀이</div>

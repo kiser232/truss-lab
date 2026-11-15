@@ -93,9 +93,9 @@ export default function HomePage() {
             <div className="entry-body">
               <h3>기출 원본</h3>
               <p>
-                2019–2024 문제지와, 올려 둔 PDF 원본.
+                2019–2024 원본을 보면서
                 <br />
-                계산기를 켠 채로 축력과 반력을 확인합니다.
+                옆의 계산기로 축력과 반력을 구합니다.
               </p>
               <Link href="/past" className="cta quiet">
                 기출 보기 <Arrow />
