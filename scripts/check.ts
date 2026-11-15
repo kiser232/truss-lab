@@ -186,31 +186,24 @@ const flat = analyze({ ...TRIPOD, nodes: TRIPOD.nodes.map((node) => ({ ...node, 
 assert(flat.status === "unstable", "flat tripod");
 
 const examAnswers: Record<string, string> = {
-  "2019-ac": "−40 압",
-  "2019-ab": "+32 인",
-  "2019-ay": "+24",
-  "2020-cd": "+60 인",
-  "2020-ad": "−50 압",
-  "2020-ac": "+40 인",
-  "2021-df": "0",
-  "2021-de": "−32 압",
-  "2021-ay": "+24",
-  "2022-bc": "+100 인",
-  "2022-ac": "−80 압",
-  "2022-ax": "+80",
-  "2023-be": "−48 압",
-  "2023-bd": "+40 인",
-  "2023-ab": "0",
-  "2024-ac": "−30 압",
-  "2024-by": "+12",
-  "2024-ad": "−28.28 압",
-  "2024-degree": "m + r = 3j",
+  "2019-t": "6kN",
+  "2019-arch": "0",
+  "2019-fixed": "2kN·m",
+  "2021-a": "30kN 압축",
+  "2024-n": "N1=2, N2=1.732",
 };
 for (const problem of EXAMS) {
   const text = correctText(problem);
   assert(text === examAnswers[problem.id], `${problem.id} answer ${text}`);
-  if (problem.ask.kind !== "choice") assert(analyze(problem.model).status === "ok", `${problem.id} status`);
+  if (problem.model.nodes.length > 0) assert(analyze(problem.model).status === "ok", `${problem.id} status`);
 }
+const t2019 = analyze(EXAMS.find((problem) => problem.id === "2019-t")!.model);
+near(t2019.forces.find((force) => force.name === "BC")!.axial, 6, 0.05);
+const a2021 = analyze(EXAMS.find((problem) => problem.id === "2021-a")!.model);
+near(a2021.forces.find((force) => force.name === "FG")!.axial, -30, 0.05);
+const n2024 = analyze(EXAMS.find((problem) => problem.id === "2024-n")!.model);
+near(n2024.forces.find((force) => force.name === "AC")!.axial, 2, 0.02);
+near(n2024.forces.find((force) => force.name === "AB")!.axial, -1.732, 0.02);
 console.log("exams", EXAMS.length);
 
 if (failed) {

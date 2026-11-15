@@ -131,7 +131,10 @@ export function TrussPhotos() {
           </article>
         ))}
       </div>
-      <p className="note">대표 사진 한 장. 누르면 같은 형식의 다른 사진이 열립니다. 출처는 Wikimedia Commons입니다.</p>
+      <p className="note">
+        자료집의 대표 사진입니다. 누르면 같은 항목의 다른 사진이 열립니다.{" "}
+        <a href={asset("/exams/photos.pdf")}>사진 PDF 원본</a>
+      </p>
       {open && shot ? (
         <div className="lightbox" role="dialog" aria-modal="true" aria-label={`${open.name} 사진`}>
           <button type="button" className="lightbox-back" aria-label="닫기" onClick={() => setOpen(null)} />

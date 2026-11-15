@@ -7,7 +7,7 @@ export default function EasierPage() {
       <main className="doc wide">
         <p className="kicker">STRUCTURE</p>
         <h1>구조역학을 더 쉽게</h1>
-        <p className="note">대표 사진으로 형태를 먼저 보고, 누르면 같은 종류의 다른 사진이 열립니다.</p>
+        <p className="note">워런, 하우, 프랫, 그 외. 대표 사진 하나를 누르면 자료집의 나머지 사진이 열립니다.</p>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, margin: "18px 0" }}>
           <article className="doc-card">
             <svg viewBox="0 0 220 80" aria-hidden>

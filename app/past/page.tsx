@@ -5,7 +5,11 @@ import Link from "next/link";
 import { ExamDesk } from "@/components/exam-desk";
 import { SpaceBoard } from "@/components/space-board";
 import { TrussBoard } from "@/components/truss-board";
+import { Workspace } from "@/components/workspace";
+import { analyze } from "@/lib/analyze";
 import { EXAM_YEARS, examsFor, type Problem } from "@/lib/exams";
+import { LAB_MATERIALS } from "@/lib/materials";
+import type { Model } from "@/lib/types";
 import { asset } from "@/lib/asset";
 import { loadFile, removeFile, removeMade, saveFile, saveMade, useMade, type MadeProblem } from "@/lib/memory";
 import { isSpaceModel } from "@/lib/space";
@@ -87,7 +91,7 @@ export default function PastPage() {
         </Link>
       </div>
       <p className="note" style={{ marginTop: 0 }}>
-        왼쪽이 그 해의 원본이고, 오른쪽 계산기로 축력을 구합니다. 연습 문항은 같은 형식이며, 틀리면 오답노트에 쌓입니다.
+        왼쪽이 그 해 기출 원본입니다. 트러스 문항은 오른쪽 계산기에 같은 그림이 있습니다. 틀린 답은 오답노트로 갑니다.
       </p>
       <div className="row-tools" style={{ marginBottom: 12 }}>
         {EXAM_YEARS.map((item) => (
@@ -168,13 +172,13 @@ export default function PastPage() {
             ) : (
               <div className="panel" style={{ padding: 14 }}>
                 <p className="note" style={{ marginTop: 0 }}>
-                  {year} 원본 PDF가 없습니다. 파일을 올리면 이 칸에 열립니다. 아래 그림은 그 해 형식으로 만든 연습입니다.
+                  {year} 원본 PDF가 없습니다. 파일을 올리면 이 칸에 열립니다.
                 </p>
                 {problems.map((problem, problemIndex) => {
                   const showBoard = problemIndex === 0 || problems[problemIndex - 1].model !== problem.model;
                   return (
                     <article key={problem.id} style={{ marginTop: 12 }}>
-                      {showBoard ? <PaperBoard model={problem.model} /> : null}
+                      {showBoard && problem.model.nodes.length > 0 ? <PaperBoard model={problem.model} /> : null}
                       <button type="button" className={`stage-chip ${index === problemIndex ? "on" : ""}`} onClick={() => setIndex(problemIndex)}>
                         {problemIndex + 1}. {problem.prompt}
                       </button>
@@ -206,10 +210,31 @@ export default function PastPage() {
                 setIndex(0);
               }}
             />
-          ) : null}
+          ) : (
+            <ScratchPad key={year} note={problems.length === 0 ? "이 해는 왼쪽 원본을 보면서 계산기에 옮겨 그리세요." : ""} />
+          )}
         </div>
       )}
     </main>
+  );
+}
+
+function ScratchPad({ note }: { note: string }) {
+  const [model, setModel] = useState<Model>({ nodes: [], members: [], supports: [], loads: [] });
+  const analysis = analyze(model);
+  const visible = analysis.status === "unstable" || analysis.status === "invalid" || analysis.status === "empty" ? null : analysis;
+  return (
+    <div>
+      {note ? <p className="note" style={{ marginTop: 0 }}>{note}</p> : null}
+      <Workspace
+        model={model}
+        onChange={setModel}
+        materials={LAB_MATERIALS}
+        analysis={visible}
+        tools={["select", "node", "member", "pin", "rollerY", "rollerX", "load", "erase"]}
+        scene="paper"
+      />
+    </div>
   );
 }
 
