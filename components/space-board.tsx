@@ -68,6 +68,7 @@ export function SpaceBoard({
   analysis,
   pendingId,
   tool,
+  compact = false,
   placeY = null,
   focusNodeId,
   focusMemberIds,
@@ -78,6 +79,7 @@ export function SpaceBoard({
   analysis: Analysis | null;
   pendingId: number | null;
   tool: string;
+  compact?: boolean;
   placeY?: number | null;
   focusNodeId?: number;
   focusMemberIds?: number[];
@@ -193,7 +195,7 @@ export function SpaceBoard({
   const showForces = analysis && analysis.status !== "unstable" && analysis.status !== "invalid" && analysis.status !== "empty";
 
   return (
-    <div className="board-shell">
+    <div className={`board-shell ${compact ? "compact" : ""}`}>
       <svg
         ref={svgRef}
         className="space-board"

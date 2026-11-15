@@ -1,4 +1,5 @@
 import { analyze, memberName } from "../lib/analyze";
+import { correctText, EXAMS } from "../lib/exams";
 import { TRIPOD } from "../lib/space";
 import { gradeMission, missionCases } from "../lib/grade";
 import { compressionAllow, CONTEST_MATERIALS, LAB_MATERIALS, materialById } from "../lib/materials";
@@ -183,6 +184,34 @@ for (const force of tripod.forces) near(force.axial, -expected, 0.05);
 assert(tripod.steps.some((step) => step.lines.some((line) => line.text.includes("ΣFz"))), "tripod fz");
 const flat = analyze({ ...TRIPOD, nodes: TRIPOD.nodes.map((node) => ({ ...node, y: 0 })) });
 assert(flat.status === "unstable", "flat tripod");
+
+const examAnswers: Record<string, string> = {
+  "2019-ac": "−40 압",
+  "2019-ab": "+32 인",
+  "2019-ay": "+24",
+  "2020-cd": "+60 인",
+  "2020-ad": "−50 압",
+  "2020-ac": "+40 인",
+  "2021-df": "0",
+  "2021-de": "−32 압",
+  "2021-ay": "+24",
+  "2022-bc": "+100 인",
+  "2022-ac": "−80 압",
+  "2022-ax": "+80",
+  "2023-be": "−48 압",
+  "2023-bd": "+40 인",
+  "2023-ab": "0",
+  "2024-ac": "−30 압",
+  "2024-by": "+12",
+  "2024-ad": "−28.28 압",
+  "2024-degree": "m + r = 3j",
+};
+for (const problem of EXAMS) {
+  const text = correctText(problem);
+  assert(text === examAnswers[problem.id], `${problem.id} answer ${text}`);
+  if (problem.ask.kind !== "choice") assert(analyze(problem.model).status === "ok", `${problem.id} status`);
+}
+console.log("exams", EXAMS.length);
 
 if (failed) {
   console.error(`\n${failed} missions failed`);

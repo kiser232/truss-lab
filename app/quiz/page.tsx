@@ -1,16 +1,35 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useSyncExternalStore } from "react";
 import { analyze } from "@/lib/analyze";
 import { CONCEPTS, jointProblems, type Choice } from "@/lib/quiz";
 import { QUIZ_MATERIALS } from "@/lib/materials";
+import { gradeAnswer, useWrongs } from "@/lib/memory";
 import { TrussBoard } from "@/components/truss-board";
 import { SolutionPanel } from "@/components/solution-panel";
+import { WrongBook } from "@/components/wrong-book";
 
-type Tab = "joint" | "material" | "concept";
+type Tab = "joint" | "material" | "concept" | "wrongs";
+
+function useHash() {
+  return useSyncExternalStore(
+    (onChange) => {
+      window.addEventListener("hashchange", onChange);
+      return () => window.removeEventListener("hashchange", onChange);
+    },
+    () => window.location.hash,
+    () => "",
+  );
+}
 
 export default function QuizPage() {
-  const [tab, setTab] = useState<Tab>("joint");
+  const hash = useHash();
+  const [override, setOverride] = useState<Tab | null>(null);
+  const tab = override ?? (hash === "#wrongs" ? "wrongs" : "joint");
+  const wrongs = useWrongs();
+  function setTab(next: Tab) {
+    setOverride(next);
+  }
   return (
     <main className="work">
       <p className="kicker">CHALLENGE</p>
@@ -21,6 +40,7 @@ export default function QuizPage() {
             ["joint", "절점법"],
             ["material", "자재"],
             ["concept", "개념"],
+            ["wrongs", wrongs.length ? `오답노트 ${wrongs.length}` : "오답노트"],
           ] as const
         ).map(([id, label]) => (
           <button key={id} type="button" className={`tool ${tab === id ? "on" : ""}`} onClick={() => setTab(id)}>
@@ -31,6 +51,7 @@ export default function QuizPage() {
       {tab === "joint" ? <JointQuiz /> : null}
       {tab === "material" ? <MaterialQuiz /> : null}
       {tab === "concept" ? <ConceptQuiz /> : null}
+      {tab === "wrongs" ? <WrongBook notes={wrongs} onChange={() => undefined} /> : null}
     </main>
   );
 }
@@ -49,6 +70,13 @@ function JointQuiz() {
   function choose(choice: number) {
     setPicked(choice);
     setStep(null);
+    gradeAnswer({
+      key: `joint:${problem.id}`,
+      source: "절점법",
+      prompt: problem.prompt,
+      choices: problem.choices,
+      picked: choice,
+    });
   }
 
   return (
@@ -171,7 +199,28 @@ function MaterialQuiz() {
         })}
       </div>
       <div className="row-tools" style={{ marginTop: 12 }}>
-        <button type="button" className="primary-btn" onClick={() => setChecked(true)}>
+        <button
+          type="button"
+          className="primary-btn"
+          onClick={() => {
+            setChecked(true);
+            for (const item of QUIZ_MATERIALS) {
+              const mine = placed[item.id];
+              const answer = item.group === "tension" ? "인장" : "압축";
+              const pickedText = mine === "tension" ? "인장" : mine === "compression" ? "압축" : "미정";
+              gradeAnswer({
+                key: `material:${item.id}`,
+                source: "자재",
+                prompt: `${item.name}은 어느 쪽?`,
+                choices: [
+                  { text: pickedText, ok: pickedText === answer },
+                  { text: answer, ok: true },
+                ],
+                picked: pickedText === answer ? 1 : 0,
+              });
+            }
+          }}
+        >
           확인
         </button>
         {checked ? (
@@ -198,7 +247,22 @@ function ConceptQuiz() {
         {item.options.map((option, optionIndex) => {
           const cls = !revealed ? "" : optionIndex === item.answer ? "good" : picked === optionIndex ? "bad" : "";
           return (
-            <button key={option} type="button" className={`quiz-option ${cls}`} disabled={revealed} onClick={() => setPicked(optionIndex)}>
+            <button
+              key={option}
+              type="button"
+              className={`quiz-option ${cls}`}
+              disabled={revealed}
+              onClick={() => {
+                setPicked(optionIndex);
+                gradeAnswer({
+                  key: `concept:${item.q}`,
+                  source: "개념",
+                  prompt: item.q,
+                  choices: item.options.map((text, index) => ({ text, ok: index === item.answer })),
+                  picked: optionIndex,
+                });
+              }}
+            >
               {option}
             </button>
           );

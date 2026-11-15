@@ -6,6 +6,8 @@ import { usePathname } from "next/navigation";
 const LINKS = [
   { href: "/", label: "홈" },
   { href: "/guide", label: "학습 가이드" },
+  { href: "/past", label: "기출" },
+  { href: "/board", label: "게시판" },
   { href: "/easier", label: "구조역학을 더 쉽게" },
 ];
 
@@ -30,7 +32,7 @@ export function Header() {
       <nav className="nav">
         {LINKS.map((link, index) => (
           <span key={link.href} style={{ display: "contents" }}>
-            {index === 2 ? <i className="split" /> : null}
+            {index === 4 ? <i className="split" /> : null}
             <Link href={link.href} className={isCurrent(path, link.href) ? "active" : ""}>
               {link.label}
             </Link>
