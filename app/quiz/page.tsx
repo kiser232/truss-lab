@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { analyze } from "@/lib/analyze";
 import { CONCEPTS, jointProblems, type Choice } from "@/lib/quiz";
 import { LAB_MATERIALS, QUIZ_MATERIALS } from "@/lib/materials";
@@ -58,16 +58,31 @@ export default function QuizPage() {
 }
 
 function JointQuiz() {
-  const problems = useMemo(() => jointProblems(), []);
+  const [problems, setProblems] = useState<ReturnType<typeof jointProblems> | null>(null);
   const [index, setIndex] = useState(0);
+  useEffect(() => {
+    setProblems(jointProblems());
+  }, []);
+  if (!problems) return <p className="note">문제를 고르는 중</p>;
   const problem = problems[index];
+  function next() {
+    if (index + 1 < problems.length) {
+      setIndex(index + 1);
+      return;
+    }
+    const fresh = jointProblems();
+    const lastId = problem.id;
+    const rotated = fresh[0]?.id === lastId ? [...fresh.slice(1), fresh[0]] : fresh;
+    setProblems(rotated);
+    setIndex(0);
+  }
   return (
     <JointRound
       key={problem.id}
       index={index}
       total={problems.length}
       problem={problem}
-      onNext={() => setIndex((n) => (n + 1) % problems.length)}
+      onNext={next}
     />
   );
 }
@@ -86,10 +101,12 @@ function JointRound({
   const [model, setModel] = useState<Model>(problem.model);
   const [picked, setPicked] = useState<number | null>(null);
   const [step, setStep] = useState<number | null>(null);
+  const [calculated, setCalculated] = useState(false);
   const analysis = analyze(model);
   const official = analyze(problem.model);
   const visible = analysis.status === "unstable" || analysis.status === "invalid" || analysis.status === "empty" ? null : analysis;
   const revealed = picked !== null;
+  const showForces = calculated || revealed;
   const correct = problem.choices[picked ?? -1]?.ok;
   const focus = step !== null ? official.steps[step] : undefined;
 
@@ -116,19 +133,38 @@ function JointRound({
             <Option key={choice.text} choice={choice} index={choiceIndex} picked={picked} onPick={choose} />
           ))}
         </div>
-        <p className="note">계산기 숫자와 같은 보기를 고르세요. 배치를 고쳐 다시 계산할 수 있습니다.</p>
+        <p className="note">
+          {showForces
+            ? "부재력이 표시되었습니다. 묻는 부재와 같은 보기를 고르세요."
+            : "부재력은 계산을 누른 뒤에만 나옵니다. 먼저 직접 풀어 보세요."}
+        </p>
         <Workspace
           model={model}
-          onChange={setModel}
+          onChange={(next) => {
+            setModel(next);
+            setCalculated(false);
+            setStep(null);
+          }}
           materials={LAB_MATERIALS}
-          analysis={visible}
+          analysis={showForces ? visible : null}
           tools={["select", "node", "member", "pin", "rollerY", "load", "erase"]}
           scene="paper"
-          focusNodeId={focus?.focusNodeId}
-          focusMemberIds={focus?.memberIds}
+          focusNodeId={showForces ? focus?.focusNodeId : undefined}
+          focusMemberIds={showForces ? focus?.memberIds : undefined}
         />
         <div className="row-tools" style={{ marginTop: 8 }}>
-          <button type="button" className="ghost" onClick={() => setModel(problem.model)}>
+          <button type="button" className="primary-btn" onClick={() => setCalculated(true)}>
+            계산
+          </button>
+          <button
+            type="button"
+            className="ghost"
+            onClick={() => {
+              setModel(problem.model);
+              setCalculated(false);
+              setStep(null);
+            }}
+          >
             문제 배치로
           </button>
         </div>

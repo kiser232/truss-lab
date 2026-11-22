@@ -24,12 +24,14 @@ export function ExamDesk({
   const [model, setModel] = useState<Model>(problem.model);
   const [picked, setPicked] = useState<number | null>(null);
   const [step, setStep] = useState<number | null>(null);
+  const [calculated, setCalculated] = useState(false);
   const [prompt, setPrompt] = useState(problem.prompt);
   const [target, setTarget] = useState(`axial:${problem.ask.kind === "axial" ? problem.ask.member : memberOptions(problem.model)[0] ?? "AB"}`);
   const choices = problemChoices(problem);
   const analysis = analyze(model);
   const visible = analysis.status === "unstable" || analysis.status === "invalid" || analysis.status === "empty" ? null : analysis;
-  const focus = step !== null ? analysis.steps[step] : undefined;
+  const showForces = calculated || picked !== null;
+  const focus = showForces && step !== null ? analysis.steps[step] : undefined;
 
   function choose(index: number) {
     setPicked(index);
@@ -79,7 +81,18 @@ export function ExamDesk({
           })}
         </div>
         <div className="row-tools" style={{ margin: "8px 0" }}>
-          <button type="button" className="ghost" onClick={() => setModel(problem.model)}>
+          <button type="button" className="primary-btn" onClick={() => setCalculated(true)}>
+            계산
+          </button>
+          <button
+            type="button"
+            className="ghost"
+            onClick={() => {
+              setModel(problem.model);
+              setCalculated(false);
+              setStep(null);
+            }}
+          >
             문제 배치로
           </button>
         </div>
@@ -89,13 +102,19 @@ export function ExamDesk({
             {choices[picked]?.ok ? "" : " · 오답노트에 넣었습니다."}
           </p>
         ) : (
-          <p className="note">계산기 숫자와 같은 것을 고르세요. 틀리면 오답노트로 갑니다.</p>
+          <p className="note">
+            {showForces ? "부재력이 표시되었습니다. 같은 보기를 고르세요." : "부재력은 계산을 누른 뒤에만 나옵니다. 먼저 직접 풀어 보세요."}
+          </p>
         )}
         <Workspace
           model={model}
-          onChange={setModel}
+          onChange={(next) => {
+            setModel(next);
+            setCalculated(false);
+            setStep(null);
+          }}
           materials={LAB_MATERIALS}
-          analysis={visible}
+          analysis={showForces ? visible : null}
           tools={["select", "node", "member", "pin", "rollerY", "load", "erase"]}
           scene="paper"
           space={isSpaceModel(model)}
@@ -129,7 +148,13 @@ export function ExamDesk({
           </div>
         ) : null}
       </div>
-      <SolutionPanel analysis={analysis} active={step} onPick={setStep} kicker="계산" />
+      <SolutionPanel
+        analysis={showForces ? analysis : null}
+        active={step}
+        onPick={setStep}
+        kicker="계산"
+        placeholder="계산을 누르면 부재력과 절점 순서가 나옵니다."
+      />
       <style>{`
         .lab-grid { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 14px; align-items: start; }
         @media (max-width: 980px) { .lab-grid { grid-template-columns: 1fr; } }
