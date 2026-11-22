@@ -64,9 +64,10 @@ function JointQuiz() {
     setProblems(jointProblems());
   }, []);
   if (!problems) return <p className="note">문제를 고르는 중</p>;
-  const problem = problems[index];
+  const deck = problems;
+  const problem = deck[index];
   function next() {
-    if (index + 1 < problems.length) {
+    if (index + 1 < deck.length) {
       setIndex(index + 1);
       return;
     }
@@ -80,7 +81,7 @@ function JointQuiz() {
     <JointRound
       key={problem.id}
       index={index}
-      total={problems.length}
+      total={deck.length}
       problem={problem}
       onNext={next}
     />
