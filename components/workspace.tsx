@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { memberName } from "@/lib/analyze";
 import { splitColinearMembers } from "@/lib/shape";
 import { compressionAllow } from "@/lib/materials";
@@ -51,7 +51,7 @@ export function Workspace({
   onSpace,
   cue = null,
   cueKey = 0,
-  required = [],
+  links = [],
 }: {
   model: Model;
   onChange: (model: Model) => void;
@@ -72,7 +72,7 @@ export function Workspace({
   onSpace?: (next: boolean) => void;
   cue?: "rock" | "walk" | "car" | "book" | "kids" | null;
   cueKey?: number;
-  required?: [number, number][];
+  links?: { i: number; j: number }[];
 }) {
   const [tool, setTool] = useState<Tool>(space ? "node" : tools.includes("member") ? "member" : tools[0]);
   const [innerMaterial, setInnerMaterial] = useState(
@@ -85,7 +85,10 @@ export function Workspace({
   }
   const [pending, setPending] = useState<number | null>(null);
   const [cursor, setCursor] = useState<{ x: number; y: number } | null>(null);
-  const [menu, setMenu] = useState<{ x: number; y: number; memberId: number | null } | null>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number; memberId: number | null; kind: "material" | "group" } | null>(null);
+  const [group, setGroup] = useState<number[]>([]);
+  const [axisPick, setAxisPick] = useState(false);
+  const moveBase = useRef<Model | null>(null);
   const [loadInput, setLoadInput] = useState({ fx: "0", down: "60" });
   const [height, setHeight] = useState("2");
   const [selected, setSelected] = useState<{ kind: "node" | "member"; id: number } | null>(null);
@@ -103,6 +106,8 @@ export function Workspace({
         setPending(null);
         setMenu(null);
         setSelected(null);
+        setGroup([]);
+        setAxisPick(false);
       }
       if ((event.key === "Delete" || event.key === "Backspace") && selected && !readOnly) {
         event.preventDefault();
@@ -180,9 +185,17 @@ export function Workspace({
     if (readOnly) return;
     setMenu(null);
     if (tool === "select") {
-      if (hit.memberId) setSelected({ kind: "member", id: hit.memberId });
-      else if (hit.nodeId) setSelected({ kind: "node", id: hit.nodeId });
-      else setSelected(null);
+      if (hit.memberId) {
+        const member = model.members.find((item) => item.id === hit.memberId);
+        if (member && !group.includes(member.i)) setGroup([member.i, member.j]);
+        setSelected({ kind: "member", id: hit.memberId });
+      } else if (hit.nodeId) {
+        if (!group.includes(hit.nodeId)) setGroup([hit.nodeId]);
+        setSelected({ kind: "node", id: hit.nodeId });
+      } else {
+        setSelected(null);
+        setGroup([]);
+      }
       return;
     }
     if (tool === "erase") {
@@ -252,13 +265,120 @@ export function Workspace({
     }
   }
 
+  function inGroup(hit: Hit) {
+    if (group.length === 0) return false;
+    if (hit.nodeId && group.includes(hit.nodeId)) return true;
+    const member = model.members.find((item) => item.id === hit.memberId);
+    return Boolean(member && (group.includes(member.i) || group.includes(member.j)));
+  }
+
   function onRight(hit: Hit, x: number, y: number) {
     if (readOnly) return;
-    setMenu({
-      x: Math.min(x, window.innerWidth - 300),
-      y: Math.min(y, window.innerHeight - 420),
-      memberId: hit.memberId,
+    const place = { x: Math.min(x, window.innerWidth - 220), y: Math.min(y, window.innerHeight - 180) };
+    if (inGroup(hit)) {
+      setMenu({ ...place, memberId: null, kind: "group" });
+      return;
+    }
+    setMenu({ ...place, memberId: hit.memberId, kind: "material" });
+  }
+
+  function moveGroup(dx: number, dy: number) {
+    const base = moveBase.current ?? model;
+    if (!moveBase.current) moveBase.current = model;
+    const ids = new Set(group);
+    onChange({
+      ...base,
+      nodes: base.nodes.map((node) =>
+        ids.has(node.id) && !lockedNodeIds.includes(node.id) ? { ...node, x: node.x + dx, y: node.y + dy } : node,
+      ),
     });
+  }
+
+  function finishGroupMove() {
+    moveBase.current = null;
+  }
+
+  function duplicateGroup() {
+    if (group.length === 0) return;
+    const ids = new Set(group);
+    const picked = model.nodes.filter((node) => ids.has(node.id));
+    const minX = Math.min(...picked.map((node) => node.x));
+    const maxX = Math.max(...picked.map((node) => node.x));
+    const dx = Math.max(1, maxX - minX + 1);
+    let id = maxId(model) + 1;
+    const map = new Map<number, number>();
+    const nodes = picked.map((node) => {
+      const copy = { ...node, id, x: node.x + dx };
+      map.set(node.id, id);
+      id += 1;
+      return copy;
+    });
+    const members = model.members
+      .filter((member) => ids.has(member.i) && ids.has(member.j))
+      .map((member) => ({ ...member, id: id++, i: map.get(member.i)!, j: map.get(member.j)! }));
+    const supports = lockSupports
+      ? []
+      : model.supports.filter((support) => ids.has(support.nodeId)).map((support) => ({ ...support, nodeId: map.get(support.nodeId)! }));
+    const loads = model.loads.filter((load) => ids.has(load.nodeId)).map((load) => ({ ...load, nodeId: map.get(load.nodeId)! }));
+    onChange({
+      nodes: [...model.nodes, ...nodes],
+      members: [...model.members, ...members],
+      supports: [...model.supports, ...supports],
+      loads: [...model.loads, ...loads],
+    });
+    setGroup(nodes.map((node) => node.id));
+    setMenu(null);
+  }
+
+  function mirrorGroup(axisX: number) {
+    if (group.length === 0) return;
+    const ids = new Set(group);
+    let id = maxId(model) + 1;
+    const map = new Map<number, number>();
+    const nodes = [...model.nodes];
+    const at = new Map(nodes.map((node) => [`${Math.round(node.x * 100) / 100},${Math.round(node.y * 100) / 100}`, node.id]));
+    const created: number[] = [];
+    for (const node of model.nodes.filter((item) => ids.has(item.id))) {
+      const x = Math.round((axisX * 2 - node.x) * 1000) / 1000;
+      const key = `${Math.round(x * 100) / 100},${Math.round(node.y * 100) / 100}`;
+      const found = at.get(key);
+      if (found) {
+        map.set(node.id, found);
+        continue;
+      }
+      nodes.push({ ...node, id, x });
+      at.set(key, id);
+      map.set(node.id, id);
+      created.push(id);
+      id += 1;
+    }
+    const members = [...model.members];
+    for (const member of model.members.filter((item) => ids.has(item.i) && ids.has(item.j))) {
+      const i = map.get(member.i);
+      const j = map.get(member.j);
+      if (!i || !j || i === j) continue;
+      if (members.some((item) => (item.i === i && item.j === j) || (item.i === j && item.j === i))) continue;
+      members.push({ ...member, id, i, j });
+      id += 1;
+    }
+    const supports = [...model.supports];
+    if (!lockSupports) {
+      for (const support of model.supports.filter((item) => ids.has(item.nodeId))) {
+        const nodeId = map.get(support.nodeId);
+        if (!nodeId || supports.some((item) => item.nodeId === nodeId)) continue;
+        supports.push({ ...support, nodeId });
+      }
+    }
+    const loads = [...model.loads];
+    for (const load of model.loads.filter((item) => ids.has(item.nodeId))) {
+      const nodeId = map.get(load.nodeId);
+      if (!nodeId || loads.some((item) => item.nodeId === nodeId)) continue;
+      loads.push({ ...load, nodeId });
+    }
+    onChange({ nodes, members, supports, loads });
+    if (created.length) setGroup(created);
+    setAxisPick(false);
+    setMenu(null);
   }
 
   function chooseMaterial(id: string) {
@@ -307,10 +427,10 @@ export function Workspace({
           <button
             type="button"
             className="material-chip"
-            onClick={(event) => setMenu({ x: event.clientX, y: event.clientY, memberId: null })}
+            onClick={(event) => setMenu({ x: event.clientX, y: event.clientY, memberId: null, kind: "material" })}
             onContextMenu={(event) => {
               event.preventDefault();
-              setMenu({ x: event.clientX, y: event.clientY, memberId: null });
+              setMenu({ x: event.clientX, y: event.clientY, memberId: null, kind: "material" });
             }}
           >
             <i className="swatch" style={{ background: material?.color ?? "#999" }} />
@@ -353,6 +473,10 @@ export function Workspace({
               {coordNote ? <small>{coordNote}</small> : null}
             </form>
           ) : null}
+          {tool === "select" && !space ? (
+            <span className="note">선택에서 끌면 묶입니다. 묶인 것을 끌면 옮깁니다. 화면 이동은 Shift를 누른 채 끌기입니다.</span>
+          ) : null}
+          {axisPick ? <span className="note">대칭축이 될 세로선을 판에서 누르세요.</span> : null}
           {tool === "load" ? (
             <span className="coord-field">
               <span>하중</span>
@@ -376,7 +500,6 @@ export function Workspace({
           onLeft={onLeft}
           onRight={onRight}
           onRotate={readOnly || lockSupports ? undefined : turnSupport}
-          required={required}
         />
       ) : (
         <TrussBoard
@@ -395,7 +518,13 @@ export function Workspace({
           onRotate={readOnly || lockSupports ? undefined : turnSupport}
           cue={cue}
           cueKey={cueKey}
-          required={required}
+          links={links}
+          groupNodeIds={group}
+          axisPick={axisPick}
+          onMarquee={readOnly || space ? undefined : (ids) => { setGroup(ids); setSelected(null); }}
+          onGroupMove={readOnly || space ? undefined : moveGroup}
+          onGroupDrop={finishGroupMove}
+          onAxis={readOnly || space ? undefined : mirrorGroup}
         />
       )}
 
@@ -418,8 +547,19 @@ export function Workspace({
             style={{ position: "fixed", inset: 0, zIndex: 40, background: "transparent", border: 0 }}
           />
           <div className="menu" style={{ left: menu.x, top: menu.y }}>
-            <h4>{menuMember ? memberName(model.nodes, menuMember) : "다음 부재"} · 우클릭 자재</h4>
-            {materials.map((item) => (
+            {menu.kind === "group" ? (
+              <>
+                <h4>그룹 {group.length}절점</h4>
+                <button type="button" className="mat" onClick={duplicateGroup}>
+                  <span><strong>복제</strong><small>복사본이 바로 그룹이 됩니다</small></span>
+                </button>
+                <button type="button" className="mat" onClick={() => { setAxisPick(true); setMenu(null); }}>
+                  <span><strong>좌우대칭</strong><small>다음에 누르는 세로선이 중심축입니다</small></span>
+                </button>
+              </>
+            ) : null}
+            {menu.kind === "material" ? <h4>{menuMember ? memberName(model.nodes, menuMember) : "다음 부재"} · 우클릭 자재</h4> : null}
+            {menu.kind === "material" ? materials.map((item) => (
               <button
                 key={item.id}
                 type="button"
@@ -439,7 +579,7 @@ export function Workspace({
                   <span>/m</span>
                 </span>
               </button>
-            ))}
+            )) : null}
           </div>
         </>
       ) : null}

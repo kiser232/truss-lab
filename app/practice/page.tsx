@@ -4,7 +4,7 @@ import { useMemo, useState, useSyncExternalStore } from "react";
 import { modelCost } from "@/lib/analyze";
 import { gradeMission } from "@/lib/grade";
 import { CONTEST_MATERIALS, LAB_MATERIALS } from "@/lib/materials";
-import { blankMissionModel, exampleModel, MISSIONS } from "@/lib/missions";
+import { blankMissionModel, exampleModel, MISSIONS, openDeckLinks } from "@/lib/missions";
 import { fmt } from "@/lib/format";
 import type { Grade, Model } from "@/lib/types";
 import { SolutionPanel } from "@/components/solution-panel";
@@ -20,7 +20,7 @@ function readBest() {
 }
 
 function cueOf(mission: (typeof MISSIONS)[number]) {
-  if (mission.passers === "kids") return "kids" as const;
+  if (mission.walkers === "kids") return "kids" as const;
   if (mission.contest) return "book" as const;
   if (mission.car) return "car" as const;
   if (mission.scene === "cliff") return "walk" as const;
@@ -101,11 +101,9 @@ export default function PracticePage() {
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "end", marginBottom: 12, flexWrap: "wrap" }}>
         <div>
           <p className="kicker">EXPLORE</p>
-          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-            <h1 style={{ margin: "4px 0 0", fontSize: 28, letterSpacing: "-0.04em" }}>실습</h1>
-            <button type="button" className="ghost" onClick={() => setStoryOpen(true)}>미션</button>
-          </div>
+          <h1 style={{ margin: "4px 0 0", fontSize: 28, letterSpacing: "-0.04em" }}>실습</h1>
         </div>
+        <button type="button" className="ghost" onClick={() => setStoryOpen(true)}>미션</button>
         <div className="row-tools">
           {MISSIONS.map((item) => (
             <button key={item.id} type="button" className={`stage-chip ${item.contest ? "contest" : ""} ${item.id === mission.id ? "on" : ""}`} onClick={() => selectStage(item.id)}>
@@ -198,7 +196,7 @@ export default function PracticePage() {
           space={Boolean(mission.space)}
           cue={cue > 0 && !mission.space ? cueOf(mission) : null}
           cueKey={cue}
-          required={mission.required}
+          links={openDeckLinks(mission, shown)}
         />
         {mission.space && cue > 0 ? <div key={cue} className="lantern-fall" aria-hidden>등불</div> : null}
         </div>
@@ -221,16 +219,7 @@ export default function PracticePage() {
             <p className="kicker">{mission.space ? "3D" : `STAGE ${mission.kicker}`}</p>
             <h2 style={{ margin: "4px 0 8px" }}>{mission.title}</h2>
             <p style={{ marginTop: 0, lineHeight: 1.6 }}>{mission.story}</p>
-            <button
-              type="button"
-              className="primary-btn"
-              onClick={() => {
-                setStoryOpen(false);
-                if (mission.passers) setCue((value) => value + 1);
-              }}
-            >
-              시작
-            </button>
+            <button type="button" className="primary-btn" onClick={() => setStoryOpen(false)}>시작</button>
           </div>
         </div>
       ) : null}

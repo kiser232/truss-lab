@@ -309,7 +309,7 @@ a { color: inherit; text-decoration: none; }
   touch-action: none;
 }
 .board-shell.compact svg { max-height: 340px; }
-.board-shell.grab svg { cursor: default; }
+.board-shell.selecting svg { cursor: crosshair; }
 .mat-card small { display: block; }
 
 .panel {

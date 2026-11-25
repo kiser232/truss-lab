@@ -267,61 +267,39 @@ function StageCue({
   model,
   loads,
   cam,
-  path,
 }: {
   cue: "rock" | "walk" | "car" | "book" | "kids";
   model: Model;
   loads: Load[];
   cam: Camera;
-  path?: number[];
 }) {
-  if (cue === "kids" && path && path.length > 1) {
-    const points = path
-      .map((id) => model.nodes.find((node) => node.id === id))
-      .filter((node): node is NonNullable<typeof node> => Boolean(node))
-      .map((node) => toScreen(node.x, node.y, cam));
-    if (points.length > 1) {
-      const d = points.map((point, index) => `${index === 0 ? "M" : "L"}${point.sx},${point.sy - 30}`).join(" ");
-      const shirts = ["#2f6bff", "#e23b4a", "#16a34a"];
-      return (
-        <g>
-          {shirts.map((shirt, index) => (
-            <g key={shirt}>
-              <animateMotion dur="3.4s" begin={`${index * 0.55}s`} fill="freeze" path={d} />
-              <circle cy="-14" r="6" fill="#f6d7b8" />
-              <rect x="-7" y="-8" width="14" height="12" rx="3" fill={shirt} />
-              <line y1="4" x2="-7" y2="16" stroke="#172033" strokeWidth="2.5" />
-              <line y1="4" x2="7" y2="16" stroke="#172033" strokeWidth="2.5" />
-            </g>
-          ))}
-        </g>
-      );
-    }
-  }
-  if (cue === "car" || cue === "walk") {
+  if (cue === "car" || cue === "walk" || cue === "kids") {
     const xs = model.nodes.map((node) => node.x);
     const y = Math.min(...model.nodes.map((node) => node.y));
     const from = toScreen(Math.min(...xs), y, cam);
     const to = toScreen(Math.max(...xs), y, cam);
+    const people = cue === "kids" ? [0, 0.7, 1.4] : [0];
     return (
       <g>
-        <g>
-          <animateTransform attributeName="transform" type="translate" from={`${from.sx} ${from.sy - 28}`} to={`${to.sx} ${to.sy - 28}`} dur={cue === "car" ? "2.6s" : "2.2s"} fill="freeze" />
-          {cue === "car" ? (
-            <g>
-              <rect x="-22" y="-12" width="44" height="16" rx="4" fill="#172033" />
-              <circle cx="-12" cy="6" r="4" fill="#ef8a24" />
-              <circle cx="12" cy="6" r="4" fill="#ef8a24" />
-            </g>
-          ) : (
-            <g>
-              <circle cy="-16" r="6" fill="#2f6bff" />
-              <line y1="-10" y2="8" stroke="#172033" strokeWidth="3" />
-              <line y1="8" x2="-8" y2="18" stroke="#172033" strokeWidth="3" />
-              <line y1="8" x2="8" y2="18" stroke="#172033" strokeWidth="3" />
-            </g>
-          )}
-        </g>
+        {people.map((delay) => (
+          <g key={delay}>
+            <animateTransform attributeName="transform" type="translate" from={`${from.sx - delay * 36} ${from.sy - 28}`} to={`${to.sx} ${to.sy - 28}`} begin={`${delay}s`} dur={cue === "car" ? "2.6s" : "3.2s"} fill="freeze" />
+            {cue === "car" ? (
+              <g>
+                <rect x="-22" y="-12" width="44" height="16" rx="4" fill="#172033" />
+                <circle cx="-12" cy="6" r="4" fill="#ef8a24" />
+                <circle cx="12" cy="6" r="4" fill="#ef8a24" />
+              </g>
+            ) : (
+              <g>
+                <circle cy="-18" r="6" fill={cue === "kids" ? "#f59e0b" : "#2f6bff"} />
+                <line y1="-12" y2="6" stroke="#172033" strokeWidth="3" />
+                <line y1="6" x2="-8" y2="16" stroke="#172033" strokeWidth="3" />
+                <line y1="6" x2="8" y2="16" stroke="#172033" strokeWidth="3" />
+              </g>
+            )}
+          </g>
+        ))}
       </g>
     );
   }
@@ -366,7 +344,13 @@ export function TrussBoard({
   onRotate,
   cue = null,
   cueKey = 0,
-  required = [],
+  links = [],
+  groupNodeIds = [],
+  axisPick = false,
+  onMarquee,
+  onGroupMove,
+  onGroupDrop,
+  onAxis,
 }: {
   model: Model;
   loads?: Load[];
@@ -384,7 +368,13 @@ export function TrussBoard({
   onRotate?: (nodeId: number) => void;
   cue?: "rock" | "walk" | "car" | "book" | "kids" | null;
   cueKey?: number;
-  required?: [number, number][];
+  links?: { i: number; j: number }[];
+  groupNodeIds?: number[];
+  axisPick?: boolean;
+  onMarquee?: (nodeIds: number[]) => void;
+  onGroupMove?: (dx: number, dy: number) => void;
+  onGroupDrop?: () => void;
+  onAxis?: (x: number) => void;
 }) {
   const drawnLoads = loads ?? model.loads;
   const focusing = Boolean(focusMemberIds && focusMemberIds.length > 0);
@@ -392,7 +382,13 @@ export function TrussBoard({
   const svgRef = useRef<SVGSVGElement>(null);
   const [cam, setCam] = useState<Camera>(HOME_CAMERA);
   const camRef = useRef(cam);
-  const drag = useRef<{ x: number; y: number; cx: number; cy: number; moved: boolean } | null>(null);
+  const drag = useRef<
+    | { kind: "pan"; x: number; y: number; cx: number; cy: number; moved: boolean }
+    | { kind: "marquee"; x: number; y: number; sx: number; sy: number; moved: boolean }
+    | { kind: "group"; x: number; y: number; wx: number; wy: number; moved: boolean }
+    | null
+  >(null);
+  const [marquee, setMarquee] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const [hoverSupport, setHoverSupport] = useState<number | null>(null);
   const hideSupport = useRef<number | null>(null);
   function holdSupport(nodeId: number) {
@@ -456,28 +452,68 @@ export function TrussBoard({
   for (let y = minY; y <= maxY + 1e-6; y = quantize(y + lineStep, lineStep)) ys.push(y);
 
   return (
-    <div className={`board-shell ${compact ? "compact" : ""} ${tool === "select" ? "grab" : ""}`}>
+    <div className={`board-shell ${compact ? "compact" : ""} ${tool === "select" ? "selecting" : ""}`}>
       <svg
         ref={svgRef}
         viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
         role="img"
-        aria-label="트러스 작업판. 휠로 확대하고, 빈 곳을 끌면 이동합니다."
+        aria-label="트러스 작업판. 선택 도구에서 끌면 묶고, 묶인 절점을 끌면 옮깁니다. 화면 이동은 빈 곳을 끌거나 Shift+끌기, 휠로 확대합니다."
         onPointerDown={(event) => {
           if (event.button !== 0 && event.button !== 1) return;
           const point = pointFrom(event);
           if (!point) return;
           const hit = hitTest(point, model, camRef.current);
+          if (axisPick && event.button === 0 && !event.shiftKey && onAxis) {
+            onAxis(point.x);
+            return;
+          }
+          const inGroup =
+            (hit.nodeId !== null && groupNodeIds.includes(hit.nodeId)) ||
+            (hit.memberId !== null &&
+              model.members.some(
+                (member) => member.id === hit.memberId && (groupNodeIds.includes(member.i) || groupNodeIds.includes(member.j)),
+              ));
+          if (tool === "select" && event.button === 0 && !event.shiftKey && onMarquee) {
+            try {
+              event.currentTarget.setPointerCapture(event.pointerId);
+            } catch {
+              /* synthetic pointers have no active id */
+            }
+            if (inGroup && onGroupMove) {
+              drag.current = { kind: "group", x: event.clientX, y: event.clientY, wx: point.x, wy: point.y, moved: false };
+              return;
+            }
+            drag.current = { kind: "marquee", x: event.clientX, y: event.clientY, sx: point.sx, sy: point.sy, moved: false };
+            setMarquee({ x: point.sx, y: point.sy, w: 0, h: 0 });
+            return;
+          }
           if (event.button === 0 && (hit.nodeId || hit.memberId) && !event.shiftKey) return;
           try {
             event.currentTarget.setPointerCapture(event.pointerId);
           } catch {
             /* synthetic pointers have no active id */
           }
-          drag.current = { x: event.clientX, y: event.clientY, cx: camRef.current.cx, cy: camRef.current.cy, moved: false };
+          drag.current = { kind: "pan", x: event.clientX, y: event.clientY, cx: camRef.current.cx, cy: camRef.current.cy, moved: false };
         }}
         onPointerMove={(event) => {
           const active = drag.current;
-          if (active) {
+          const point = pointFrom(event);
+          if (active?.kind === "marquee" && point) {
+            if (Math.hypot(event.clientX - active.x, event.clientY - active.y) > 4) active.moved = true;
+            setMarquee({
+              x: Math.min(active.sx, point.sx),
+              y: Math.min(active.sy, point.sy),
+              w: Math.abs(point.sx - active.sx),
+              h: Math.abs(point.sy - active.sy),
+            });
+            return;
+          }
+          if (active?.kind === "group" && point) {
+            if (Math.hypot(event.clientX - active.x, event.clientY - active.y) > 4) active.moved = true;
+            if (active.moved) onGroupMove?.(point.x - active.wx, point.y - active.wy);
+            return;
+          }
+          if (active?.kind === "pan") {
             const dx = event.clientX - active.x;
             const dy = event.clientY - active.y;
             if (Math.hypot(dx, dy) > 4) active.moved = true;
@@ -496,19 +532,43 @@ export function TrussBoard({
               return;
             }
           }
-          onMove(pointFrom(event));
+          onMove(point);
         }}
         onPointerUp={(event) => {
           const active = drag.current;
           drag.current = null;
+          setMarquee(null);
           try {
             if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
           } catch {
             /* already released */
           }
+          const point = pointFrom(event);
+          if (active?.kind === "marquee") {
+            if (!active.moved || !point) {
+              if (event.button === 0 && point) onLeft(hitTest(point, model, camRef.current));
+              return;
+            }
+            const x1 = Math.min(active.sx, point.sx);
+            const x2 = Math.max(active.sx, point.sx);
+            const y1 = Math.min(active.sy, point.sy);
+            const y2 = Math.max(active.sy, point.sy);
+            const ids = model.nodes
+              .filter((node) => {
+                const screen = toScreen(node.x, node.y, camRef.current);
+                return screen.sx >= x1 && screen.sx <= x2 && screen.sy >= y1 && screen.sy <= y2;
+              })
+              .map((node) => node.id);
+            onMarquee?.(ids);
+            return;
+          }
+          if (active?.kind === "group") {
+            onGroupDrop?.();
+            if (!active.moved && event.button === 0 && point) onLeft(hitTest(point, model, camRef.current));
+            return;
+          }
           if (active?.moved) return;
           if (event.button !== 0) return;
-          const point = pointFrom(event);
           if (!point) return;
           onLeft(hitTest(point, model, camRef.current));
         }}
@@ -539,6 +599,22 @@ export function TrussBoard({
           </text>
         ))}
 
+        {links.map((link) => {
+          const a = model.nodes.find((node) => node.id === link.i);
+          const b = model.nodes.find((node) => node.id === link.j);
+          if (!a || !b) return null;
+          const as = toScreen(a.x, a.y, cam);
+          const bs = toScreen(b.x, b.y, cam);
+          return (
+            <g key={`need-${link.i}-${link.j}`}>
+              <line x1={as.sx} y1={as.sy} x2={bs.sx} y2={bs.sy} stroke="#d97706" strokeWidth="3" strokeDasharray="7 6" />
+              <text x={(as.sx + bs.sx) / 2} y={(as.sy + bs.sy) / 2 - 10} textAnchor="middle" fontSize="12" fontWeight="800" fill="#b45309">
+                이어야 함
+              </text>
+            </g>
+          );
+        })}
+
         {model.members.map((member) => {
           const a = model.nodes.find((node) => node.id === member.i);
           const b = model.nodes.find((node) => node.id === member.j);
@@ -555,6 +631,7 @@ export function TrussBoard({
                 : "#94a3b8"
             : material?.color ?? "#334155";
           const dim = focusing && !focusMemberIds?.includes(member.id);
+          const grouped = groupNodeIds.includes(member.i) && groupNodeIds.includes(member.j);
           const mid = { x: (as.sx + bs.sx) / 2, y: (as.sy + bs.sy) / 2 };
           const dx = bs.sx - as.sx;
           const dy = bs.sy - as.sy;
@@ -563,6 +640,9 @@ export function TrussBoard({
           const oy = (dx / len) * 14;
           return (
             <g key={member.id} opacity={dim ? 0.28 : 1}>
+              {grouped ? (
+                <line x1={as.sx} y1={as.sy} x2={bs.sx} y2={bs.sy} stroke="#7aa2ff" strokeWidth="12" strokeLinecap="round" />
+              ) : null}
               <line
                 x1={as.sx}
                 y1={as.sy}
@@ -626,36 +706,12 @@ export function TrussBoard({
           const p = toScreen(node.x, node.y, cam);
           return <LoadArrow key={`l${load.nodeId}-${index}`} load={load} sx={p.sx} sy={p.sy} />;
         })}
-        {required.map(([fromId, toId]) => {
-          const joined = model.members.some(
-            (member) => (member.i === fromId && member.j === toId) || (member.i === toId && member.j === fromId),
-          );
-          if (joined) return null;
-          const from = model.nodes.find((node) => node.id === fromId);
-          const to = model.nodes.find((node) => node.id === toId);
-          if (!from || !to) return null;
-          const a = toScreen(from.x, from.y, cam);
-          const b = toScreen(to.x, to.y, cam);
-          return (
-            <g key={`need-${fromId}-${toId}`}>
-              <line x1={a.sx} y1={a.sy} x2={b.sx} y2={b.sy} stroke="#d97706" strokeWidth="3" strokeDasharray="7 6" />
-              <text x={(a.sx + b.sx) / 2} y={(a.sy + b.sy) / 2 - 8} textAnchor="middle" fontSize="11" fontWeight="800" fill="#d97706">
-                이어야 함
-              </text>
-            </g>
-          );
-        })}
-        {cue ? (
-          <StageCue
-            key={cueKey}
-            cue={cue}
-            model={model}
-            loads={drawnLoads}
-            cam={cam}
-            path={required.length ? [required[0][0], ...required.map((pair) => pair[1])] : undefined}
-          />
-        ) : null}
+        {cue ? <StageCue key={cueKey} cue={cue} model={model} loads={drawnLoads} cam={cam} /> : null}
 
+        {marquee ? <rect x={marquee.x} y={marquee.y} width={marquee.w} height={marquee.h} fill="rgba(47,107,255,0.12)" stroke="#2f6bff" strokeDasharray="4 3" /> : null}
+        {axisPick && cursor ? (
+          <line x1={toScreen(cursor.x, minY, cam).sx} y1={toScreen(cursor.x, minY, cam).sy} x2={toScreen(cursor.x, maxY, cam).sx} y2={toScreen(cursor.x, maxY, cam).sy} stroke="#2f6bff" strokeWidth="2" strokeDasharray="5 4" />
+        ) : null}
         {tool === "node" && cursor ? (
           <circle
             cx={toScreen(clampGrid(cursor.x, cursor.y, cam.zoom).x, clampGrid(cursor.x, cursor.y, cam.zoom).y, cam).sx}
@@ -668,7 +724,7 @@ export function TrussBoard({
 
         {model.nodes.map((node) => {
           const p = toScreen(node.x, node.y, cam);
-          const on = node.id === focusNodeId || node.id === pendingId;
+          const on = node.id === focusNodeId || node.id === pendingId || groupNodeIds.includes(node.id);
           return (
             <g key={node.id}>
               <circle cx={p.sx} cy={p.sy} r={on ? 12 : 9} fill="white" stroke={on ? "#2f6bff" : "#172033"} strokeWidth="2.2" />
