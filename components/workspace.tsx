@@ -2,11 +2,11 @@
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { memberName } from "@/lib/analyze";
-import { splitColinearMembers } from "@/lib/shape";
+import { normalizeMembers } from "@/lib/shape";
 import { compressionAllow } from "@/lib/materials";
 import { rotateSupport } from "@/lib/support";
 import { quantize } from "@/lib/view";
-import type { Analysis, Load, Material, Model, SupportType } from "@/lib/types";
+import type { Analysis, Load, Material, Model, Node, Support, SupportType } from "@/lib/types";
 import { SpaceBoard } from "./space-board";
 import { LIMIT, TrussBoard, type Hit, type WorldPoint } from "./truss-board";
 
@@ -30,6 +30,15 @@ const SPACE_TOOLS: Tool[] = ["select", "node", "member", "ball", "slot", "roller
 function maxId(model: Model) {
   return Math.max(0, ...model.nodes.map((node) => node.id), ...model.members.map((member) => member.id));
 }
+
+type Clip = {
+  nodes: Node[];
+  members: Model["members"];
+  supports: Support[];
+  loads: Load[];
+  dx: number;
+  times: number;
+};
 
 export function Workspace({
   model,
@@ -99,11 +108,125 @@ export function Workspace({
   const [coordNote, setCoordNote] = useState("");
   const material = materials.find((item) => item.id === materialId) ?? materials[0];
   const activeMaterialId = material?.id ?? materialId;
+  const history = useRef<Model[]>([]);
+  const emitted = useRef<Model | null>(null);
+  const clipRef = useRef<Clip | null>(null);
+
+  function emit(next: Model, record = true) {
+    const normalized = normalizeMembers(next);
+    if (record && !readOnly) {
+      history.current.push(model);
+      if (history.current.length > 60) history.current.shift();
+    }
+    emitted.current = normalized;
+    onChange(normalized);
+  }
+
+  function undo() {
+    const prev = history.current.pop();
+    if (!prev || readOnly) return;
+    const normalized = normalizeMembers(prev);
+    emitted.current = normalized;
+    onChange(normalized);
+  }
+
+  function copySelection() {
+    const ids = new Set(group);
+    if (ids.size === 0 && selected?.kind === "node") ids.add(selected.id);
+    if (ids.size === 0 && selected?.kind === "member") {
+      const member = model.members.find((item) => item.id === selected.id);
+      if (member) {
+        ids.add(member.i);
+        ids.add(member.j);
+      }
+    }
+    if (ids.size === 0) return false;
+    const nodes = model.nodes.filter((node) => ids.has(node.id)).map((node) => ({ ...node }));
+    if (nodes.length === 0) return false;
+    const minX = Math.min(...nodes.map((node) => node.x));
+    const maxX = Math.max(...nodes.map((node) => node.x));
+    clipRef.current = {
+      nodes,
+      members: model.members.filter((member) => ids.has(member.i) && ids.has(member.j)).map((member) => ({ ...member })),
+      supports: model.supports.filter((support) => ids.has(support.nodeId)).map((support) => ({ ...support })),
+      loads: model.loads.filter((load) => ids.has(load.nodeId)).map((load) => ({ ...load })),
+      dx: Math.max(1, maxX - minX + 1),
+      times: 0,
+    };
+    return true;
+  }
+
+  function pasteSelection() {
+    const clip = clipRef.current;
+    if (!clip || readOnly || clip.nodes.length === 0) return;
+    clip.times += 1;
+    const dx = clip.dx * clip.times;
+    let id = maxId(model) + 1;
+    const map = new Map<number, number>();
+    const nodes = clip.nodes.map((node) => {
+      const copy = { ...node, id, x: node.x + dx };
+      map.set(node.id, id);
+      id += 1;
+      return copy;
+    });
+    const members = clip.members.flatMap((member) => {
+      const i = map.get(member.i);
+      const j = map.get(member.j);
+      if (!i || !j || i === j) return [];
+      const copy = { ...member, id, i, j };
+      id += 1;
+      return [copy];
+    });
+    const supports = lockSupports
+      ? []
+      : clip.supports.flatMap((support) => {
+          const nodeId = map.get(support.nodeId);
+          return nodeId ? [{ ...support, nodeId }] : [];
+        });
+    const loads = clip.loads.flatMap((load) => {
+      const nodeId = map.get(load.nodeId);
+      return nodeId ? [{ ...load, nodeId }] : [];
+    });
+    emit({
+      nodes: [...model.nodes, ...nodes],
+      members: [...model.members, ...members],
+      supports: [...model.supports, ...supports],
+      loads: [...model.loads, ...loads],
+    });
+    setGroup(nodes.map((node) => node.id));
+    setSelected(null);
+    setMenu(null);
+  }
+
+  useEffect(() => {
+    if (emitted.current === model) return;
+    history.current = [];
+    const normalized = normalizeMembers(model);
+    emitted.current = normalized;
+    if (normalized !== model) onChange(normalized);
+  }, [model, onChange]);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
       const target = event.target as HTMLElement | null;
-      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) return;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
+      const shortcut = event.ctrlKey || event.metaKey;
+      if (shortcut && !event.shiftKey && event.key.toLowerCase() === "z") {
+        event.preventDefault();
+        undo();
+        return;
+      }
+      if (shortcut && event.key.toLowerCase() === "c") {
+        if (window.getSelection()?.toString()) return;
+        if (copySelection()) event.preventDefault();
+        return;
+      }
+      if (shortcut && event.key.toLowerCase() === "v") {
+        if (!clipRef.current) return;
+        event.preventDefault();
+        pasteSelection();
+        return;
+      }
       if (event.key === "Escape") {
         setPending(null);
         setMenu(null);
@@ -122,13 +245,13 @@ export function Workspace({
 
   function erase(hit: { nodeId: number | null; memberId: number | null }) {
     if (hit.memberId) {
-      onChange({ ...model, members: model.members.filter((member) => member.id !== hit.memberId) });
+      emit({ ...model, members: model.members.filter((member) => member.id !== hit.memberId) });
       setSelected(null);
       return;
     }
     if (hit.nodeId && !lockedNodeIds.includes(hit.nodeId)) {
       const id = hit.nodeId;
-      onChange({
+      emit({
         ...model,
         nodes: model.nodes.filter((node) => node.id !== id),
         members: model.members.filter((member) => member.i !== id && member.j !== id),
@@ -142,7 +265,7 @@ export function Workspace({
 
   function setSupport(nodeId: number, type: SupportType) {
     if (lockSupports) return;
-    onChange({
+    emit({
       ...model,
       supports: [...model.supports.filter((support) => support.nodeId !== nodeId), { nodeId, type }],
     });
@@ -150,7 +273,7 @@ export function Workspace({
 
   function turnSupport(nodeId: number) {
     if (lockSupports || readOnly) return;
-    onChange({
+    emit({
       ...model,
       supports: model.supports.map((support) => (support.nodeId === nodeId ? rotateSupport(support) : support)),
     });
@@ -176,7 +299,7 @@ export function Workspace({
       setCoordNote("그 좌표에 절점이 있습니다.");
       return;
     }
-    onChange({
+    emit({
       ...model,
       nodes: [...model.nodes, { id: maxId(model) + 1, x: point.x, y: point.y, ...(space ? { z: placedZ } : {}) }],
     });
@@ -209,13 +332,13 @@ export function Workspace({
       const next = { x: hit.ground.x, y, z: hit.ground.z };
       const occupied = model.nodes.some((node) => Math.hypot(node.x - next.x, node.y - next.y, (node.z ?? 0) - next.z) < 0.12);
       if (occupied) return;
-      onChange({ ...model, nodes: [...model.nodes, { id: maxId(model) + 1, ...next }] });
+      emit({ ...model, nodes: [...model.nodes, { id: maxId(model) + 1, ...next }] });
       return;
     }
     if (tool === "node" && !space && hit.grid && !hit.nodeId) {
       const occupied = model.nodes.some((node) => Math.hypot(node.x - hit.grid!.x, node.y - hit.grid!.y) < 0.02);
       if (occupied) return;
-      onChange({
+      emit({
         ...model,
         nodes: [...model.nodes, { id: maxId(model) + 1, x: hit.grid.x, y: hit.grid.y }],
       });
@@ -234,15 +357,17 @@ export function Workspace({
         (member) =>
           (member.i === pending && member.j === hit.nodeId) || (member.j === pending && member.i === hit.nodeId),
       );
-      if (!exists) {
-        const added = splitColinearMembers(model, pending, hit.nodeId, activeMaterialId);
-        if (added.length) onChange({ ...model, members: [...model.members, ...added] });
+      if (!exists && hit.nodeId) {
+        emit({
+          ...model,
+          members: [...model.members, { id: maxId(model) + 1, i: pending, j: hit.nodeId, materialId: activeMaterialId }],
+        });
       }
       setPending(null);
       return;
     }
     if (tool === "member" && hit.memberId) {
-      onChange({
+      emit({
         ...model,
         members: model.members.map((member) => (member.id === hit.memberId ? { ...member, materialId: activeMaterialId } : member)),
       });
@@ -257,7 +382,7 @@ export function Workspace({
       const down = Number(loadInput.down);
       if (!Number.isFinite(fx) || !Number.isFinite(down) || (Math.abs(fx) < 0.05 && Math.abs(down) < 0.05)) return;
       const parts = [Math.abs(fx) >= 0.05 ? `${fx}→` : "", Math.abs(down) >= 0.05 ? `${down}↓` : ""].filter(Boolean);
-      onChange({
+      emit({
         ...model,
         loads: [
           ...model.loads.filter((load) => load.nodeId !== hit.nodeId),
@@ -325,7 +450,7 @@ export function Workspace({
       ? { x: clampNum(x, -16, 24), y: clampNum(y, 0, 16), z: clampNum(z ?? 0, -16, 16) }
       : { x: clampNum(x, LIMIT.minX, LIMIT.maxX), y: clampNum(y, LIMIT.minY, LIMIT.maxY), z: anchor.z ?? 0 };
     const nodes = shiftNodes(anchor.id, target.x - anchor.x, target.y - anchor.y, target.z - (anchor.z ?? 0));
-    onChange({ ...model, nodes });
+    emit({ ...model, nodes });
     const moved = nodes.find((node) => node.id === anchor.id);
     if (moved && nodes.some((node) => node.id !== moved.id && sameSpot(node, moved))) {
       setNodeNote("같은 좌표의 절점이 있습니다. 통합할 수 있습니다.");
@@ -361,7 +486,7 @@ export function Workspace({
       const extra = model.loads.find((load) => drop.has(load.nodeId));
       if (extra) loads = [...loads, { ...extra, nodeId }];
     }
-    onChange({
+    emit({
       nodes: model.nodes.filter((node) => !drop.has(node.id)),
       members,
       supports,
@@ -373,15 +498,24 @@ export function Workspace({
   }
 
   function moveGroup(dx: number, dy: number) {
-    const base = moveBase.current ?? model;
-    if (!moveBase.current) moveBase.current = model;
+    if (!moveBase.current) {
+      moveBase.current = model;
+      if (!readOnly) {
+        history.current.push(model);
+        if (history.current.length > 60) history.current.shift();
+      }
+    }
+    const base = moveBase.current;
     const ids = new Set(group);
-    onChange({
-      ...base,
-      nodes: base.nodes.map((node) =>
-        ids.has(node.id) && !lockedNodeIds.includes(node.id) ? { ...node, x: node.x + dx, y: node.y + dy } : node,
-      ),
-    });
+    emit(
+      {
+        ...base,
+        nodes: base.nodes.map((node) =>
+          ids.has(node.id) && !lockedNodeIds.includes(node.id) ? { ...node, x: node.x + dx, y: node.y + dy } : node,
+        ),
+      },
+      false,
+    );
   }
 
   function finishGroupMove() {
@@ -410,7 +544,7 @@ export function Workspace({
       ? []
       : model.supports.filter((support) => ids.has(support.nodeId)).map((support) => ({ ...support, nodeId: map.get(support.nodeId)! }));
     const loads = model.loads.filter((load) => ids.has(load.nodeId)).map((load) => ({ ...load, nodeId: map.get(load.nodeId)! }));
-    onChange({
+    emit({
       nodes: [...model.nodes, ...nodes],
       members: [...model.members, ...members],
       supports: [...model.supports, ...supports],
@@ -465,7 +599,7 @@ export function Workspace({
       if (!nodeId || loads.some((item) => item.nodeId === nodeId)) continue;
       loads.push({ ...load, nodeId });
     }
-    onChange({ nodes, members, supports, loads });
+    emit({ nodes, members, supports, loads });
     if (created.length) setGroup(created);
     setAxisPick(false);
     setMenu(null);
@@ -474,7 +608,7 @@ export function Workspace({
   function chooseMaterial(id: string) {
     setMaterialId(id);
     if (menu?.memberId) {
-      onChange({
+      emit({
         ...model,
         members: model.members.map((member) => (member.id === menu.memberId ? { ...member, materialId: id } : member)),
       });
@@ -545,7 +679,7 @@ export function Workspace({
                 onChange={(event) => {
                   const y = Number(event.target.value);
                   if (!Number.isFinite(y)) return;
-                  onChange({
+                  emit({
                     ...model,
                     nodes: model.nodes.map((node) => (node.id === selected.id ? { ...node, y } : node)),
                   });
@@ -566,7 +700,7 @@ export function Workspace({
             </form>
           ) : null}
           {tool === "select" && !space ? (
-            <span className="note">선택에서 끌면 묶입니다. 묶인 것을 끌면 옮깁니다. 화면 이동은 Shift를 누른 채 끌기입니다.</span>
+            <span className="note">선택에서 끌면 묶입니다. 묶인 것을 끌면 옮깁니다. Ctrl+Z 되돌리기, Ctrl+C 복사, Ctrl+V 붙여넣기. 화면 이동은 Shift를 누른 채 끌기입니다.</span>
           ) : null}
           {axisPick ? <span className="note">대칭축이 될 세로선을 판에서 누르세요.</span> : null}
           {tool === "load" ? (

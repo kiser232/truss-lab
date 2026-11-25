@@ -13,6 +13,67 @@ function sameMember(members: Member[], i: number, j: number) {
   return members.some((member) => (member.i === i && member.j === j) || (member.i === j && member.j === i));
 }
 
+function pairKey(i: number, j: number) {
+  return i < j ? `${i}-${j}` : `${j}-${i}`;
+}
+
+function segmentBetween(nodes: Node[], a: Node, b: Node) {
+  const ab = { x: b.x - a.x, y: b.y - a.y, z: (b.z ?? 0) - (a.z ?? 0) };
+  const length2 = ab.x * ab.x + ab.y * ab.y + ab.z * ab.z;
+  const length = Math.sqrt(length2);
+  if (length < 1e-6) return [];
+  return nodes
+    .filter((node) => node.id !== a.id && node.id !== b.id)
+    .map((node) => {
+      const ap = { x: node.x - a.x, y: node.y - a.y, z: (node.z ?? 0) - (a.z ?? 0) };
+      const t = (ap.x * ab.x + ap.y * ab.y + ap.z * ab.z) / length2;
+      const px = a.x + ab.x * t;
+      const py = a.y + ab.y * t;
+      const pz = (a.z ?? 0) + ab.z * t;
+      const distance = Math.hypot(node.x - px, node.y - py, (node.z ?? 0) - pz);
+      return { node, t, distance, along: t * length };
+    })
+    .filter((item) => item.along > 0.02 && length - item.along > 0.02 && item.distance < 0.15)
+    .sort((left, right) => left.t - right.t)
+    .map((item) => item.node);
+}
+
+/** 부재 선분 위의 절점마다 나누고, 같은 구간은 한 번만 남긴다. */
+export function normalizeMembers(model: Model): Model {
+  const byId = new Map(model.nodes.map((node) => [node.id, node]));
+  const kept = new Map<string, Member>();
+  let id = maxId(model) + 1;
+  let changed = false;
+  for (const member of model.members) {
+    const a = byId.get(member.i);
+    const b = byId.get(member.j);
+    if (!a || !b || member.i === member.j) {
+      changed = true;
+      continue;
+    }
+    const chain = [a, ...segmentBetween(model.nodes, a, b), b];
+    if (chain.length > 2) changed = true;
+    for (let index = 0; index < chain.length - 1; index += 1) {
+      const from = chain[index].id;
+      const to = chain[index + 1].id;
+      const key = pairKey(from, to);
+      if (kept.has(key)) {
+        changed = true;
+        continue;
+      }
+      if (from === member.i && to === member.j) kept.set(key, member);
+      else if (from === member.j && to === member.i) kept.set(key, member);
+      else {
+        changed = true;
+        kept.set(key, { id, i: from, j: to, materialId: member.materialId });
+        id += 1;
+      }
+    }
+  }
+  if (!changed && kept.size === model.members.length) return model;
+  return { ...model, members: [...kept.values()] };
+}
+
 /** 두 절점을 이을 때, 그 직선 위에 있는 절점마다 부재를 나눈다. */
 export function splitColinearMembers(model: Model, i: number, j: number, materialId: string): Member[] {
   const a = model.nodes.find((node) => node.id === i);
