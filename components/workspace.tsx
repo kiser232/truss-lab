@@ -53,6 +53,7 @@ export function Workspace({
   displayLoads,
   focusNodeId,
   focusMemberIds,
+  focusKind,
   showCost = false,
   materialId: controlledMaterial,
   onMaterial,
@@ -74,6 +75,7 @@ export function Workspace({
   displayLoads?: Load[];
   focusNodeId?: number;
   focusMemberIds?: number[];
+  focusKind?: "reaction" | "joint" | "note";
   showCost?: boolean;
   materialId?: string;
   onMaterial?: (id: string) => void;
@@ -758,6 +760,7 @@ export function Workspace({
           tool={readOnly ? "select" : tool}
           focusNodeId={focusNodeId}
           focusMemberIds={focusMemberIds}
+          focusKind={focusKind}
           onLeft={onLeft}
           onRight={onRight}
           onMove={(point: WorldPoint | null) => setCursor(point ? { x: point.x, y: point.y } : null)}

@@ -152,6 +152,7 @@ function JointRound({
           scene="paper"
           focusNodeId={showForces ? focus?.focusNodeId : undefined}
           focusMemberIds={showForces ? focus?.memberIds : undefined}
+          focusKind={showForces ? focus?.kind : undefined}
         />
         <div className="row-tools" style={{ marginTop: 8 }}>
           <button type="button" className="primary-btn" onClick={() => setCalculated(true)}>

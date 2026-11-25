@@ -239,12 +239,12 @@ function SupportGlyph({ sx, sy, type, angle, hot, outline }: { sx: number; sy: n
   return (
     <g transform={`rotate(${turn} ${sx} ${sy})`}>
       {hot ? <circle cx={sx} cy={sy + 18} r="24" fill="transparent" /> : null}
-      {outline ? <polygon points={body} fill="none" stroke="white" strokeWidth="6" strokeLinejoin="round" /> : null}
+      {outline ? <polygon points={body} fill="none" stroke="#ffe14a" strokeWidth="6" strokeLinejoin="round" filter="url(#hover-neon)" /> : null}
       <polygon points={body} fill="#172033" />
       {roller ? (
         <g>
           {outline ? (
-            <g fill="none" stroke="white" strokeWidth="5">
+            <g fill="none" stroke="#ffe14a" strokeWidth="5" filter="url(#hover-neon)">
               <circle cx={sx - 6} cy={sy + 30} r="3.2" />
               <circle cx={sx + 6} cy={sy + 30} r="3.2" />
             </g>
@@ -254,7 +254,7 @@ function SupportGlyph({ sx, sy, type, angle, hot, outline }: { sx: number; sy: n
         </g>
       ) : (
         <g>
-          {outline ? <line x1={sx - 14} y1={sy + 28} x2={sx + 14} y2={sy + 28} stroke="white" strokeWidth="5" /> : null}
+          {outline ? <line x1={sx - 14} y1={sy + 28} x2={sx + 14} y2={sy + 28} stroke="#ffe14a" strokeWidth="5" filter="url(#hover-neon)" /> : null}
           <line x1={sx - 14} y1={sy + 28} x2={sx + 14} y2={sy + 28} stroke="#172033" strokeWidth="1.6" />
         </g>
       )}
@@ -314,7 +314,7 @@ function LoadArrow({ load, sx, sy, outline }: { load: Load; sx: number; sy: numb
   const label = load.label ?? `${Math.round(mag)}N`;
   return (
     <g>
-      {outline ? <line x1={startx} y1={starty} x2={endx} y2={endy} stroke="white" strokeWidth="8" strokeLinecap="round" /> : null}
+      {outline ? <line x1={startx} y1={starty} x2={endx} y2={endy} stroke="#ffe14a" strokeWidth="8" strokeLinecap="round" filter="url(#hover-neon)" /> : null}
       <line x1={startx} y1={starty} x2={endx} y2={endy} stroke="#ef8a24" strokeWidth="3" />
       <polygon
         points={arrowHead(endx, endy, sdx, sdy)}
@@ -322,6 +322,100 @@ function LoadArrow({ load, sx, sy, outline }: { load: Load; sx: number; sy: numb
       />
       <text x={startx} y={starty - 6} textAnchor="middle" fontSize="12" fontWeight="800" fill="#d97706">
         {label}
+      </text>
+    </g>
+  );
+}
+
+function JointDiagram({
+  model,
+  analysis,
+  cam,
+  kind,
+  nodeId,
+  loads,
+  focusMemberIds,
+}: {
+  model: Model;
+  analysis: Analysis;
+  cam: Camera;
+  kind: "reaction" | "joint";
+  nodeId?: number;
+  loads: Load[];
+  focusMemberIds?: number[];
+}) {
+  type Arrow = { sx: number; sy: number; fx: number; fy: number; label: string; color: string; strong: boolean };
+  const arrows: Arrow[] = [];
+  const zeros: { sx: number; sy: number; label: string }[] = [];
+  const push = (id: number, fx: number, fy: number, label: string, color: string, strong: boolean) => {
+    if (Math.hypot(fx, fy) < 0.05) return;
+    const node = model.nodes.find((item) => item.id === id);
+    if (!node) return;
+    const point = toScreen(node.x, node.y, cam);
+    arrows.push({ sx: point.sx, sy: point.sy, fx, fy, label, color, strong });
+  };
+  if (kind === "reaction") {
+    for (const load of loads) {
+      push(load.nodeId, load.fx, load.fy, load.label ?? `${Math.round(Math.hypot(load.fx, load.fy))}`, "#ff9f1a", true);
+    }
+    for (const reaction of analysis.reactions) {
+      const mag = Math.hypot(reaction.rx, reaction.ry);
+      if (mag < 0.05) continue;
+      push(reaction.nodeId, reaction.rx, reaction.ry, `반력 ${signed(mag)}`, "#7dff6b", true);
+    }
+  } else if (nodeId) {
+    for (const load of loads) {
+      if (load.nodeId !== nodeId) continue;
+      push(load.nodeId, load.fx, load.fy, load.label ?? "하중", "#ff9f1a", true);
+    }
+    const reaction = analysis.reactions.find((item) => item.nodeId === nodeId);
+    if (reaction) push(nodeId, reaction.rx, reaction.ry, "반력", "#7dff6b", true);
+    const node = model.nodes.find((item) => item.id === nodeId);
+    for (const force of analysis.forces) {
+      if (!node || (force.i !== nodeId && force.j !== nodeId)) continue;
+      const other = model.nodes.find((item) => item.id === (force.i === nodeId ? force.j : force.i));
+      if (!other) continue;
+      const dx = other.x - node.x;
+      const dy = other.y - node.y;
+      const span = Math.hypot(dx, dy) || 1;
+      const color = force.mode === "compression" ? "#ff5d73" : force.mode === "tension" ? "#4ea2ff" : "#94a3b8";
+      if (Math.abs(force.axial) < 0.05) {
+        const at = toScreen(node.x + (dx / span) * 0.55, node.y + (dy / span) * 0.55, cam);
+        zeros.push({ sx: at.sx, sy: at.sy, label: `${force.name} 0` });
+        continue;
+      }
+      push(nodeId, (force.axial * dx) / span, (force.axial * dy) / span, `${force.name} ${signed(force.axial)}`, color, focusMemberIds?.includes(force.memberId) ?? false);
+    }
+  }
+  const max = Math.max(1, ...arrows.map((arrow) => Math.hypot(arrow.fx, arrow.fy)));
+  return (
+    <g>
+      {arrows.map((arrow, index) => {
+        const mag = Math.hypot(arrow.fx, arrow.fy);
+        const length = 24 + 58 * (mag / max);
+        const ux = arrow.fx / mag;
+        const uy = -arrow.fy / mag;
+        const x1 = arrow.sx + ux * 18;
+        const y1 = arrow.sy + uy * 18;
+        const x2 = arrow.sx + ux * (18 + length);
+        const y2 = arrow.sy + uy * (18 + length);
+        return (
+          <g key={`${arrow.label}-${index}`}>
+            <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={arrow.color} strokeWidth={arrow.strong ? 4 : 2.5} strokeLinecap="round" />
+            <polygon points={arrowHead(x2, y2, ux, uy)} fill={arrow.color} />
+            <text x={x2 + ux * 12} y={y2 + uy * 12} textAnchor="middle" fontSize="12" fontWeight="800" fill={arrow.color} stroke="#172033" strokeWidth="3" paintOrder="stroke">
+              {arrow.label}
+            </text>
+          </g>
+        );
+      })}
+      {zeros.map((item) => (
+        <text key={item.label} x={item.sx} y={item.sy} textAnchor="middle" fontSize="11" fontWeight="800" fill="#94a3b8" stroke="#172033" strokeWidth="3" paintOrder="stroke">
+          {item.label}
+        </text>
+      ))}
+      <text x="24" y="28" fontSize="12" fontWeight="800" fill="#172033">
+        {kind === "reaction" ? "주황 하중 · 초록 반력. 화살표는 구조에 작용하는 힘입니다." : "화살표는 이 절점에 작용하는 힘입니다. 파랑 인장, 빨강 압축, 초록 반력, 주황 하중."}
       </text>
     </g>
   );
@@ -411,6 +505,7 @@ export function TrussBoard({
   tool,
   focusNodeId,
   focusMemberIds,
+  focusKind,
   onLeft,
   onRight,
   onMove,
@@ -435,6 +530,7 @@ export function TrussBoard({
   tool: string;
   focusNodeId?: number;
   focusMemberIds?: number[];
+  focusKind?: "reaction" | "joint" | "note";
   onLeft: (hit: Hit) => void;
   onRight: (hit: Hit, clientX: number, clientY: number) => void;
   onMove: (point: WorldPoint | null) => void;
@@ -679,6 +775,11 @@ export function TrussBoard({
           if (!drag.current) onMove(null);
         }}
       >
+        <defs>
+          <filter id="hover-neon" x="-40%" y="-40%" width="180%" height="180%">
+            <feDropShadow dx="0" dy="0" stdDeviation="2.2" floodColor="#ffe14a" floodOpacity="0.95" />
+          </filter>
+        </defs>
         <Scene scene={scene} cam={cam} />
         {xs.map((x) => {
           const a = toScreen(x, minY, cam);
@@ -742,7 +843,7 @@ export function TrussBoard({
                 <line x1={as.sx} y1={as.sy} x2={bs.sx} y2={bs.sy} stroke="#7aa2ff" strokeWidth="12" strokeLinecap="round" />
               ) : null}
               {aimed ? (
-                <line x1={as.sx} y1={as.sy} x2={bs.sx} y2={bs.sy} stroke="white" strokeWidth="10" strokeLinecap="round" />
+                <line x1={as.sx} y1={as.sy} x2={bs.sx} y2={bs.sy} stroke="#ffe14a" strokeWidth="10" strokeLinecap="round" filter="url(#hover-neon)" />
               ) : null}
               <line
                 x1={as.sx}
@@ -829,7 +930,7 @@ export function TrussBoard({
           return (
             <g key={node.id}>
               {hover?.kind === "node" && hover.id === node.id ? (
-                <circle cx={p.sx} cy={p.sy} r={on ? 17 : 14} fill="none" stroke="white" strokeWidth="4" />
+                <circle cx={p.sx} cy={p.sy} r={on ? 17 : 14} fill="none" stroke="#ffe14a" strokeWidth="4" filter="url(#hover-neon)" />
               ) : null}
               <circle cx={p.sx} cy={p.sy} r={on ? 12 : 9} fill="white" stroke={on ? "#2f6bff" : "#172033"} strokeWidth="2.2" />
               <text x={p.sx} y={p.sy + 4} textAnchor="middle" fontSize="11" fontWeight="800" fill="#172033">
@@ -838,6 +939,18 @@ export function TrussBoard({
             </g>
           );
         })}
+
+        {analysis && (focusKind === "reaction" || focusKind === "joint") ? (
+          <JointDiagram
+            model={model}
+            analysis={analysis}
+            cam={cam}
+            kind={focusKind}
+            nodeId={focusNodeId}
+            loads={drawnLoads}
+            focusMemberIds={focusMemberIds}
+          />
+        ) : null}
 
         {onRotate && hoverSupport !== null
           ? model.supports

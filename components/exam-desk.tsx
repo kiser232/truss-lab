@@ -120,6 +120,7 @@ export function ExamDesk({
           space={isSpaceModel(model)}
           focusNodeId={focus?.focusNodeId}
           focusMemberIds={focus?.memberIds}
+          focusKind={focus?.kind}
         />
         {onSave ? (
           <div className="panel" style={{ marginTop: 12, padding: 14 }}>

@@ -105,6 +105,7 @@ export default function LabPage() {
           }}
           focusNodeId={focus?.focusNodeId}
           focusMemberIds={focus?.memberIds}
+          focusKind={focus?.kind}
         />
         <SolutionPanel analysis={analysis} active={step} onPick={setStep} />
       </div>
@@ -113,7 +114,7 @@ export default function LabPage() {
         @media (max-width: 980px) { .lab-grid { grid-template-columns: 1fr; } }
       `}</style>
       <p className="note" style={{ marginTop: 8 }}>
-        좌표에 x, y를 넣고 넣기를 누르면 절점이 생깁니다. 직선 위의 절점을 가로질러 부재를 이으면 AB, BC처럼 나뉩니다. 하중은 가로·아래 칸에 숫자를 넣고 절점을 누릅니다. 프랫·하우·와렌은 칸, 간격, 높이로 만듭니다. 풀이 줄에 커서를 올리면 그 식의 뜻이 나옵니다.
+        좌표에 x, y를 넣고 넣기를 누르면 절점이 생깁니다. 직선 위의 절점을 가로질러 부재를 이으면 AB, BC처럼 나뉩니다. 하중은 가로·아래 칸에 숫자를 넣고 절점을 누릅니다. 프랫·하우·와렌은 칸, 간격, 높이로 만듭니다. 풀이 항목을 누르면 그 단계의 힘 화살표가 나옵니다.
       </p>
     </main>
   );

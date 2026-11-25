@@ -190,6 +190,7 @@ export default function PracticePage() {
           displayLoads={bookLoads ?? grade?.loads}
           focusNodeId={focus?.focusNodeId}
           focusMemberIds={focus?.memberIds}
+          focusKind={focus?.kind}
           showCost
           materialId={brush}
           onMaterial={setBrush}
