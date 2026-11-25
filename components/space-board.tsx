@@ -95,7 +95,7 @@ export function SpaceBoard({
     cameraRef.current = camera;
   }, [camera]);
   const svgRef = useRef<SVGSVGElement>(null);
-  const drag = useRef<{ x: number; y: number; yaw: number; pitch: number; panX: number; panY: number; moved: boolean; pan: boolean } | null>(null);
+  const drag = useRef<{ x: number; y: number; yaw: number; pitch: number; panX: number; panY: number; moved: boolean; pan: boolean; hold: boolean } | null>(null);
   const [hoverSupport, setHoverSupport] = useState<number | null>(null);
   const hideSupport = useRef<number | null>(null);
   function holdSupport(nodeId: number) {
@@ -162,7 +162,37 @@ export function SpaceBoard({
         nodeId = node.id;
       }
     }
-    if (nodeId !== null) return { ...empty, nodeId };
+    let supportNodeId: number | null = null;
+    let supportBest = 40;
+    for (const support of model.supports) {
+      const node = model.nodes.find((item) => item.id === support.nodeId);
+      if (!node) continue;
+      const screen = project(node.x, node.y, node.z ?? 0, cam);
+      const turn = (-supportAngle(support) * Math.PI) / 180;
+      const dx = local.x - screen.sx;
+      const dy = local.y - screen.sy;
+      const lx = dx * Math.cos(turn) - dy * Math.sin(turn);
+      const ly = dx * Math.sin(turn) + dy * Math.cos(turn);
+      if (Math.abs(lx) > 16 || ly < 4 || ly > 34) continue;
+      const distance = Math.hypot(lx, ly - 18);
+      if (distance < supportBest) {
+        supportBest = distance;
+        supportNodeId = support.nodeId;
+      }
+    }
+    let loadNodeId: number | null = null;
+    let loadBest = 14;
+    for (const load of model.loads) {
+      const node = model.nodes.find((item) => item.id === load.nodeId);
+      if (!node) continue;
+      const from = project(node.x, node.y + 1.15, node.z ?? 0, cam);
+      const to = project(node.x, node.y + 0.2, node.z ?? 0, cam);
+      const distance = distToSegment(local.x, local.y, from.sx, from.sy, to.sx, to.sy);
+      if (distance < loadBest) {
+        loadBest = distance;
+        loadNodeId = load.nodeId;
+      }
+    }
     let memberId: number | null = null;
     let memberDistance = 12;
     for (const member of model.members) {
@@ -177,7 +207,14 @@ export function SpaceBoard({
         memberId = member.id;
       }
     }
-    if (memberId !== null) return { ...empty, memberId };
+    const choices: { distance: number; target: NonNullable<Hit["target"]> }[] = [];
+    if (nodeId !== null) choices.push({ distance: best, target: { kind: "node", id: nodeId } });
+    if (memberId !== null) choices.push({ distance: memberDistance, target: { kind: "member", id: memberId } });
+    if (supportNodeId !== null) choices.push({ distance: supportBest, target: { kind: "support", id: supportNodeId } });
+    if (loadNodeId !== null) choices.push({ distance: loadBest, target: { kind: "load", id: loadNodeId } });
+    choices.sort((a, b) => a.distance - b.distance);
+    const target = choices[0]?.target ?? null;
+    if (target) return { ...empty, nodeId, memberId, supportNodeId, loadNodeId, target };
     const ground = snapGround(groundAt(local.x, local.y, cam), cam.zoom);
     return { ...empty, ground };
   }
@@ -226,6 +263,7 @@ export function SpaceBoard({
             panY: camera.panY,
             moved: false,
             pan: event.button === 1 || event.shiftKey,
+            hold: tool === "erase" && event.button === 0,
           };
           try {
             event.currentTarget.setPointerCapture(event.pointerId);
@@ -242,7 +280,7 @@ export function SpaceBoard({
           const dx = event.clientX - active.x;
           const dy = event.clientY - active.y;
           if (Math.hypot(dx, dy) > 4) active.moved = true;
-          if (!active.moved) return;
+          if (!active.moved || active.hold) return;
           if (active.pan) {
             setCamera({ ...cameraRef.current, panX: active.panX + dx, panY: active.panY + dy });
           } else {
@@ -261,7 +299,8 @@ export function SpaceBoard({
           } catch {
             /* already released */
           }
-          if (!active || active.moved || event.button !== 0) return;
+          if (!active || event.button !== 0) return;
+          if (active.moved && !active.hold) return;
           const svg = svgRef.current;
           const local = svg ? localOf(svg, event.clientX, event.clientY) : null;
           if (!local) return;

@@ -67,12 +67,34 @@ function distToSegment(px: number, py: number, ax: number, ay: number, bx: numbe
 export type Hit = {
   nodeId: number | null;
   memberId: number | null;
+  supportNodeId?: number | null;
+  loadNodeId?: number | null;
+  target?: { kind: "node" | "member" | "support" | "load"; id: number } | null;
   world: { x: number; y: number } | null;
   grid: { x: number; y: number } | null;
   ground?: { x: number; z: number } | null;
 };
 
-export function hitTest(point: WorldPoint, model: Model, cam: Camera = HOME_CAMERA): Hit {
+function supportHit(sx: number, sy: number, px: number, py: number, angle: number) {
+  const turn = (-angle * Math.PI) / 180;
+  const dx = px - sx;
+  const dy = py - sy;
+  const lx = dx * Math.cos(turn) - dy * Math.sin(turn);
+  const ly = dx * Math.sin(turn) + dy * Math.cos(turn);
+  if (Math.abs(lx) > 18 || ly < 4 || ly > 38) return null;
+  return Math.hypot(lx, ly - 20);
+}
+
+function loadHit(load: Load, sx: number, sy: number, px: number, py: number) {
+  const mag = Math.hypot(load.fx, load.fy, load.fz ?? 0);
+  if (mag < 0.05) return null;
+  const sdx = load.fx / mag;
+  const sdy = -load.fy / mag;
+  const distance = distToSegment(px, py, sx - sdx * 48, sy - sdy * 48, sx - sdx * 16, sy - sdy * 16);
+  return distance < 14 ? distance : null;
+}
+
+export function hitTest(point: WorldPoint, model: Model, cam: Camera = HOME_CAMERA, loads: Load[] = model.loads): Hit {
   const grid = point.x >= LIMIT.minX - 0.4 && point.x <= LIMIT.maxX + 0.4 && point.y >= LIMIT.minY - 0.4 && point.y <= LIMIT.maxY + 0.4
     ? clampGrid(point.x, point.y, cam.zoom)
     : null;
@@ -86,23 +108,62 @@ export function hitTest(point: WorldPoint, model: Model, cam: Camera = HOME_CAME
       nodeId = node.id;
     }
   }
-  let memberId: number | null = null;
-  if (!nodeId) {
-    let memberBest = 12;
-    for (const member of model.members) {
-      const a = model.nodes.find((node) => node.id === member.i);
-      const b = model.nodes.find((node) => node.id === member.j);
-      if (!a || !b) continue;
-      const as = toScreen(a.x, a.y, cam);
-      const bs = toScreen(b.x, b.y, cam);
-      const d = distToSegment(point.sx, point.sy, as.sx, as.sy, bs.sx, bs.sy);
-      if (d < memberBest) {
-        memberBest = d;
-        memberId = member.id;
-      }
+  let supportNodeId: number | null = null;
+  let supportBest = 40;
+  for (const support of model.supports) {
+    const node = model.nodes.find((item) => item.id === support.nodeId);
+    if (!node) continue;
+    const screen = toScreen(node.x, node.y, cam);
+    const distance = supportHit(screen.sx, screen.sy, point.sx, point.sy, supportAngle(support));
+    if (distance !== null && distance < supportBest) {
+      supportBest = distance;
+      supportNodeId = support.nodeId;
     }
   }
-  return { nodeId, memberId, world: { x: point.x, y: point.y }, grid };
+  let loadNodeId: number | null = null;
+  let loadBest = 14;
+  for (const load of loads) {
+    const node = model.nodes.find((item) => item.id === load.nodeId);
+    if (!node) continue;
+    const screen = toScreen(node.x, node.y, cam);
+    const distance = loadHit(load, screen.sx, screen.sy, point.sx, point.sy);
+    if (distance !== null && distance < loadBest) {
+      loadBest = distance;
+      loadNodeId = load.nodeId;
+    }
+  }
+  let memberId: number | null = null;
+  let memberBest = 12;
+  for (const member of model.members) {
+    const a = model.nodes.find((node) => node.id === member.i);
+    const b = model.nodes.find((node) => node.id === member.j);
+    if (!a || !b) continue;
+    const as = toScreen(a.x, a.y, cam);
+    const bs = toScreen(b.x, b.y, cam);
+    const d = distToSegment(point.sx, point.sy, as.sx, as.sy, bs.sx, bs.sy);
+    if (d < memberBest) {
+      memberBest = d;
+      memberId = member.id;
+    }
+  }
+  let target: Hit["target"] = null;
+  let targetDistance = Infinity;
+  const consider = (distance: number | null, next: NonNullable<Hit["target"]>) => {
+    if (distance === null || distance >= targetDistance) return;
+    targetDistance = distance;
+    target = next;
+  };
+  if (nodeId !== null) {
+    const node = model.nodes.find((item) => item.id === nodeId);
+    if (node) {
+      const screen = toScreen(node.x, node.y, cam);
+      consider(Math.hypot(point.sx - screen.sx, point.sy - screen.sy), { kind: "node", id: nodeId });
+    }
+  }
+  if (memberId !== null) consider(memberBest, { kind: "member", id: memberId });
+  if (supportNodeId !== null) consider(supportBest, { kind: "support", id: supportNodeId });
+  if (loadNodeId !== null) consider(loadBest, { kind: "load", id: loadNodeId });
+  return { nodeId, memberId, supportNodeId, loadNodeId, target, world: { x: point.x, y: point.y }, grid };
 }
 
 const SCENE_SKY = {
@@ -171,20 +232,31 @@ function Scene({ scene, cam }: { scene: keyof typeof SCENE_SKY; cam: Camera }) {
   );
 }
 
-function SupportGlyph({ sx, sy, type, angle, hot }: { sx: number; sy: number; type: SupportType; angle?: number; hot?: boolean }) {
+function SupportGlyph({ sx, sy, type, angle, hot, outline }: { sx: number; sy: number; type: SupportType; angle?: number; hot?: boolean; outline?: boolean }) {
   const turn = supportAngle({ type, angle });
   const roller = type === "rollerY" || type === "rollerX";
+  const body = `${sx},${sy + 7} ${sx - 11},${sy + 24} ${sx + 11},${sy + 24}`;
   return (
     <g transform={`rotate(${turn} ${sx} ${sy})`}>
       {hot ? <circle cx={sx} cy={sy + 18} r="24" fill="transparent" /> : null}
-      <polygon points={`${sx},${sy + 7} ${sx - 11},${sy + 24} ${sx + 11},${sy + 24}`} fill="#172033" />
+      {outline ? <polygon points={body} fill="none" stroke="white" strokeWidth="6" strokeLinejoin="round" /> : null}
+      <polygon points={body} fill="#172033" />
       {roller ? (
         <g>
+          {outline ? (
+            <g fill="none" stroke="white" strokeWidth="5">
+              <circle cx={sx - 6} cy={sy + 30} r="3.2" />
+              <circle cx={sx + 6} cy={sy + 30} r="3.2" />
+            </g>
+          ) : null}
           <circle cx={sx - 6} cy={sy + 30} r="3.2" fill="none" stroke="#172033" strokeWidth="1.6" />
           <circle cx={sx + 6} cy={sy + 30} r="3.2" fill="none" stroke="#172033" strokeWidth="1.6" />
         </g>
       ) : (
-        <line x1={sx - 14} y1={sy + 28} x2={sx + 14} y2={sy + 28} stroke="#172033" strokeWidth="1.6" />
+        <g>
+          {outline ? <line x1={sx - 14} y1={sy + 28} x2={sx + 14} y2={sy + 28} stroke="white" strokeWidth="5" /> : null}
+          <line x1={sx - 14} y1={sy + 28} x2={sx + 14} y2={sy + 28} stroke="#172033" strokeWidth="1.6" />
+        </g>
       )}
     </g>
   );
@@ -229,7 +301,7 @@ export function RotateChip({
   );
 }
 
-function LoadArrow({ load, sx, sy }: { load: Load; sx: number; sy: number }) {
+function LoadArrow({ load, sx, sy, outline }: { load: Load; sx: number; sy: number; outline?: boolean }) {
   const mag = Math.hypot(load.fx, load.fy, load.fz ?? 0);
   if (mag < 0.05) return null;
   const p = { sx, sy };
@@ -242,6 +314,7 @@ function LoadArrow({ load, sx, sy }: { load: Load; sx: number; sy: number }) {
   const label = load.label ?? `${Math.round(mag)}N`;
   return (
     <g>
+      {outline ? <line x1={startx} y1={starty} x2={endx} y2={endy} stroke="white" strokeWidth="8" strokeLinecap="round" /> : null}
       <line x1={startx} y1={starty} x2={endx} y2={endy} stroke="#ef8a24" strokeWidth="3" />
       <polygon
         points={arrowHead(endx, endy, sdx, sdy)}
@@ -386,9 +459,11 @@ export function TrussBoard({
     | { kind: "pan"; x: number; y: number; cx: number; cy: number; moved: boolean }
     | { kind: "marquee"; x: number; y: number; sx: number; sy: number; moved: boolean }
     | { kind: "group"; x: number; y: number; wx: number; wy: number; moved: boolean }
+    | { kind: "erase"; x: number; y: number; moved: boolean }
     | null
   >(null);
   const [marquee, setMarquee] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  const [hover, setHover] = useState<Hit["target"]>(null);
   const [hoverSupport, setHoverSupport] = useState<number | null>(null);
   const hideSupport = useRef<number | null>(null);
   function holdSupport(nodeId: number) {
@@ -462,7 +537,7 @@ export function TrussBoard({
           if (event.button !== 0 && event.button !== 1) return;
           const point = pointFrom(event);
           if (!point) return;
-          const hit = hitTest(point, model, camRef.current);
+          const hit = hitTest(point, model, camRef.current, drawnLoads);
           if (axisPick && event.button === 0 && !event.shiftKey && onAxis) {
             onAxis(point.x);
             return;
@@ -473,6 +548,15 @@ export function TrussBoard({
               model.members.some(
                 (member) => member.id === hit.memberId && (groupNodeIds.includes(member.i) || groupNodeIds.includes(member.j)),
               ));
+          if (tool === "erase" && event.button === 0) {
+            try {
+              event.currentTarget.setPointerCapture(event.pointerId);
+            } catch {
+              /* synthetic pointers have no active id */
+            }
+            drag.current = { kind: "erase", x: event.clientX, y: event.clientY, moved: false };
+            return;
+          }
           if (tool === "select" && event.button === 0 && !event.shiftKey && onMarquee) {
             try {
               event.currentTarget.setPointerCapture(event.pointerId);
@@ -513,6 +597,10 @@ export function TrussBoard({
             if (active.moved) onGroupMove?.(point.x - active.wx, point.y - active.wy);
             return;
           }
+          if (active?.kind === "erase") {
+            if (Math.hypot(event.clientX - active.x, event.clientY - active.y) > 4) active.moved = true;
+            return;
+          }
           if (active?.kind === "pan") {
             const dx = event.clientX - active.x;
             const dy = event.clientY - active.y;
@@ -532,6 +620,10 @@ export function TrussBoard({
               return;
             }
           }
+          if (point) {
+            const next = hitTest(point, model, camRef.current, drawnLoads).target ?? null;
+            setHover((current) => (current?.kind === next?.kind && current?.id === next?.id ? current : next));
+          }
           onMove(point);
         }}
         onPointerUp={(event) => {
@@ -546,7 +638,7 @@ export function TrussBoard({
           const point = pointFrom(event);
           if (active?.kind === "marquee") {
             if (!active.moved || !point) {
-              if (event.button === 0 && point) onLeft(hitTest(point, model, camRef.current));
+              if (event.button === 0 && point) onLeft(hitTest(point, model, camRef.current, drawnLoads));
               return;
             }
             const x1 = Math.min(active.sx, point.sx);
@@ -562,23 +654,28 @@ export function TrussBoard({
             onMarquee?.(ids);
             return;
           }
+          if (active?.kind === "erase") {
+            if (!active.moved && event.button === 0 && point) onLeft(hitTest(point, model, camRef.current, drawnLoads));
+            return;
+          }
           if (active?.kind === "group") {
             onGroupDrop?.();
-            if (!active.moved && event.button === 0 && point) onLeft(hitTest(point, model, camRef.current));
+            if (!active.moved && event.button === 0 && point) onLeft(hitTest(point, model, camRef.current, drawnLoads));
             return;
           }
           if (active?.moved) return;
           if (event.button !== 0) return;
           if (!point) return;
-          onLeft(hitTest(point, model, camRef.current));
+          onLeft(hitTest(point, model, camRef.current, drawnLoads));
         }}
         onContextMenu={(event) => {
           event.preventDefault();
           const point = pointFrom(event);
           if (!point) return;
-          onRight(hitTest(point, model, camRef.current), event.clientX, event.clientY);
+          onRight(hitTest(point, model, camRef.current, drawnLoads), event.clientX, event.clientY);
         }}
         onPointerLeave={() => {
+          setHover(null);
           if (!drag.current) onMove(null);
         }}
       >
@@ -632,6 +729,7 @@ export function TrussBoard({
             : material?.color ?? "#334155";
           const dim = focusing && !focusMemberIds?.includes(member.id);
           const grouped = groupNodeIds.includes(member.i) && groupNodeIds.includes(member.j);
+          const aimed = hover?.kind === "member" && hover.id === member.id;
           const mid = { x: (as.sx + bs.sx) / 2, y: (as.sy + bs.sy) / 2 };
           const dx = bs.sx - as.sx;
           const dy = bs.sy - as.sy;
@@ -642,6 +740,9 @@ export function TrussBoard({
             <g key={member.id} opacity={dim ? 0.28 : 1}>
               {grouped ? (
                 <line x1={as.sx} y1={as.sy} x2={bs.sx} y2={bs.sy} stroke="#7aa2ff" strokeWidth="12" strokeLinecap="round" />
+              ) : null}
+              {aimed ? (
+                <line x1={as.sx} y1={as.sy} x2={bs.sx} y2={bs.sy} stroke="white" strokeWidth="10" strokeLinecap="round" />
               ) : null}
               <line
                 x1={as.sx}
@@ -695,7 +796,7 @@ export function TrussBoard({
               onPointerEnter={turnable ? () => holdSupport(support.nodeId) : undefined}
               onPointerLeave={turnable ? releaseSupport : undefined}
             >
-              <SupportGlyph sx={p.sx} sy={p.sy} type={support.type} angle={support.angle} hot={turnable} />
+              <SupportGlyph sx={p.sx} sy={p.sy} type={support.type} angle={support.angle} hot={turnable} outline={hover?.kind === "support" && hover.id === support.nodeId} />
             </g>
           );
         })}
@@ -704,7 +805,7 @@ export function TrussBoard({
           const node = model.nodes.find((item) => item.id === load.nodeId);
           if (!node) return null;
           const p = toScreen(node.x, node.y, cam);
-          return <LoadArrow key={`l${load.nodeId}-${index}`} load={load} sx={p.sx} sy={p.sy} />;
+          return <LoadArrow key={`l${load.nodeId}-${index}`} load={load} sx={p.sx} sy={p.sy} outline={hover?.kind === "load" && hover.id === load.nodeId} />;
         })}
         {cue ? <StageCue key={cueKey} cue={cue} model={model} loads={drawnLoads} cam={cam} /> : null}
 
@@ -727,6 +828,9 @@ export function TrussBoard({
           const on = node.id === focusNodeId || node.id === pendingId || groupNodeIds.includes(node.id);
           return (
             <g key={node.id}>
+              {hover?.kind === "node" && hover.id === node.id ? (
+                <circle cx={p.sx} cy={p.sy} r={on ? 17 : 14} fill="none" stroke="white" strokeWidth="4" />
+              ) : null}
               <circle cx={p.sx} cy={p.sy} r={on ? 12 : 9} fill="white" stroke={on ? "#2f6bff" : "#172033"} strokeWidth="2.2" />
               <text x={p.sx} y={p.sy + 4} textAnchor="middle" fontSize="11" fontWeight="800" fill="#172033">
                 {nodeLabel(model.nodes, node.id)}

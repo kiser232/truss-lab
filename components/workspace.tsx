@@ -211,19 +211,22 @@ export function Workspace({
       const target = event.target as HTMLElement | null;
       if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
       const shortcut = event.ctrlKey || event.metaKey;
-      if (shortcut && !event.shiftKey && event.key.toLowerCase() === "z") {
+      if (shortcut && !event.shiftKey && event.code === "KeyZ") {
         event.preventDefault();
         undo();
         return;
       }
-      if (shortcut && event.key.toLowerCase() === "c") {
-        if (window.getSelection()?.toString()) return;
-        if (copySelection()) event.preventDefault();
+      if (shortcut && event.code === "KeyC") {
+        if (copySelection()) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
         return;
       }
-      if (shortcut && event.key.toLowerCase() === "v") {
+      if (shortcut && event.code === "KeyV") {
         if (!clipRef.current) return;
         event.preventDefault();
+        event.stopPropagation();
         pasteSelection();
         return;
       }
@@ -239,13 +242,30 @@ export function Workspace({
         erase(selected.kind === "node" ? { nodeId: selected.id, memberId: null } : { nodeId: null, memberId: selected.id });
       }
     }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
   });
 
-  function erase(hit: { nodeId: number | null; memberId: number | null }) {
-    if (hit.memberId) {
-      emit({ ...model, members: model.members.filter((member) => member.id !== hit.memberId) });
+  function erase(hit: { nodeId: number | null; memberId: number | null; supportNodeId?: number | null; loadNodeId?: number | null; target?: Hit["target"] }) {
+    const kind = hit.target?.kind;
+    const id = hit.target?.id;
+    if (kind === "load" && id) {
+      if (model.loads.some((load) => load.nodeId === id)) {
+        emit({ ...model, loads: model.loads.filter((load) => load.nodeId !== id) });
+      }
+      setSelected(null);
+      return;
+    }
+    if (kind === "support" && id) {
+      if (!lockSupports && model.supports.some((support) => support.nodeId === id)) {
+        emit({ ...model, supports: model.supports.filter((support) => support.nodeId !== id) });
+        setSelected(null);
+      }
+      return;
+    }
+    if ((kind === "member" && id) || hit.memberId) {
+      const memberId = kind === "member" && id ? id : hit.memberId;
+      emit({ ...model, members: model.members.filter((member) => member.id !== memberId) });
       setSelected(null);
       return;
     }
