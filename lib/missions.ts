@@ -9,6 +9,8 @@ export type Mission = {
   hint: string;
   story: string;
   space?: boolean;
+  passers?: "kids";
+  required?: [number, number][];
   nodes: Model["nodes"];
   fixedNodeIds: number[];
   supports: Model["supports"];
@@ -32,7 +34,7 @@ export const MISSIONS: Mission[] = [
     budget: 88,
     scene: "valley",
     hint: "꼭짓점 ↑ · 빗재 압 · 수직·하현재 인",
-    story: "아침 안개가 낀 계곡이다. 마을 아이들은 8m 틈을 건너야 학교에 간다. 왼쪽 바위는 핀처럼 고정되고, 오른쪽은 롤러처럼 미끄러진다. 가운데 발판에 60N의 짐이 내려앉는다. 삼각형을 세워 그 짐을 받아 내라.",
+    story: "아침 안개가 낀 계곡이다. 마을 아이들은 8m 틈을 건너야 학교에 간다. 왼쪽 바위는 핀처럼 고정되고, 오른쪽은 롤러처럼 미끄러진다. 가운데 발판에 60N의 짐이 내려앉는다. 점선으로 표시된 발판을 이어 삼각형을 세워라.",
     nodes: [
       { id: 1, x: 2, y: 0 },
       { id: 2, x: 10, y: 0 },
@@ -42,6 +44,8 @@ export const MISSIONS: Mission[] = [
     supports: [pin(1), rollerY(2)],
     staticLoads: [{ nodeId: 3, fx: 0, fy: -60, label: "60N" }],
     car: null,
+    passers: "kids",
+    required: [[1, 3], [3, 2]],
     materials: "lab",
     example: {
       nodes: [
@@ -68,7 +72,7 @@ export const MISSIONS: Mission[] = [
     budget: 150,
     scene: "valley",
     hint: "하중마다 삼각형 · 수직 인 · 바깥 빗재 압",
-    story: "다리가 길어지자 상인 둘이 동시에 건너온다. 4m와 8m 지점에 각각 55N. 한 칸짜리 삼각형으로는 둘을 동시에 받을 수 없다. 하중마다 작은 삼각형을 만들어 계곡을 건너게 하라.",
+    story: "다리가 길어지자 상인 둘이 동시에 건너온다. 4m와 8m 지점에 각각 55N. 한 칸짜리 삼각형으로는 둘을 동시에 받을 수 없다. 하중마다 작은 삼각형을 만들어 계곡을 건너게 하라. 점선으로 표시된 발판은 반드시 이어야 한다.",
     nodes: [
       { id: 1, x: 2, y: 0 },
       { id: 2, x: 10, y: 0 },
@@ -82,6 +86,7 @@ export const MISSIONS: Mission[] = [
       { nodeId: 4, fx: 0, fy: -55, label: "55N" },
     ],
     car: null,
+    required: [[1, 3], [3, 4], [4, 2]],
     materials: "lab",
     example: {
       nodes: [
@@ -131,6 +136,7 @@ export const MISSIONS: Mission[] = [
       { nodeId: 4, fx: 0, fy: -30, label: "30N" },
     ],
     car: null,
+    required: [[1, 3], [3, 4], [4, 2]],
     materials: "lab",
     example: {
       nodes: [
@@ -178,6 +184,7 @@ export const MISSIONS: Mission[] = [
     supports: [pin(1), rollerY(5)],
     staticLoads: [],
     car: { road: [1, 2, 3, 4, 5], weight: 80, samples: 9 },
+    required: [[1, 2], [2, 3], [3, 4], [4, 5]],
     materials: "lab",
     example: {
       nodes: [
@@ -226,6 +233,7 @@ export const MISSIONS: Mission[] = [
     supports: [pin(1), rollerX(2)],
     staticLoads: [{ nodeId: 3, fx: 0, fy: -70, label: "70N" }],
     car: null,
+    required: [[1, 3]],
     materials: "lab",
     example: {
       nodes: [
@@ -259,6 +267,7 @@ export const MISSIONS: Mission[] = [
     supports: [pin(1), rollerY(2)],
     staticLoads: [{ nodeId: 3, fx: 0, fy: -100, label: "100N" }],
     car: null,
+    required: [[1, 3], [3, 2]],
     materials: "lab",
     example: {
       nodes: [
@@ -297,6 +306,7 @@ export const MISSIONS: Mission[] = [
     supports: [pin(1), rollerY(5)],
     staticLoads: [{ nodeId: 3, fx: 0, fy: -50, label: "50N" }],
     car: { road: [1, 2, 3, 4, 5], weight: 120, samples: 9 },
+    required: [[1, 2], [2, 3], [3, 4], [4, 5]],
     materials: "lab",
     example: {
       nodes: [
@@ -345,6 +355,7 @@ export const MISSIONS: Mission[] = [
     supports: [pin(1), rollerY(2)],
     staticLoads: [],
     car: null,
+    required: [[1, 3], [3, 2]],
     contest: true,
     bookNodeId: 3,
     materials: "contest",
@@ -398,6 +409,7 @@ export const MISSIONS: Mission[] = [
     ],
     staticLoads: [{ nodeId: 4, fx: 0, fy: -60, label: "60N" }],
     car: null,
+    required: [[1, 4], [2, 4], [3, 4]],
     materials: "lab",
     example: {
       nodes: [

@@ -20,6 +20,7 @@ function readBest() {
 }
 
 function cueOf(mission: (typeof MISSIONS)[number]) {
+  if (mission.passers === "kids") return "kids" as const;
   if (mission.contest) return "book" as const;
   if (mission.car) return "car" as const;
   if (mission.scene === "cliff") return "walk" as const;
@@ -100,7 +101,10 @@ export default function PracticePage() {
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "end", marginBottom: 12, flexWrap: "wrap" }}>
         <div>
           <p className="kicker">EXPLORE</p>
-          <h1 style={{ margin: "4px 0 0", fontSize: 28, letterSpacing: "-0.04em" }}>실습</h1>
+          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+            <h1 style={{ margin: "4px 0 0", fontSize: 28, letterSpacing: "-0.04em" }}>실습</h1>
+            <button type="button" className="ghost" onClick={() => setStoryOpen(true)}>미션</button>
+          </div>
         </div>
         <div className="row-tools">
           {MISSIONS.map((item) => (
@@ -169,7 +173,6 @@ export default function PracticePage() {
         </aside>
 
         <div style={{ position: "relative" }}>
-          <button type="button" className="story-replay" onClick={() => setStoryOpen(true)}>이야기</button>
         <Workspace
           key={`${mission.id}-${tab}`}
           model={shown}
@@ -195,6 +198,7 @@ export default function PracticePage() {
           space={Boolean(mission.space)}
           cue={cue > 0 && !mission.space ? cueOf(mission) : null}
           cueKey={cue}
+          required={mission.required}
         />
         {mission.space && cue > 0 ? <div key={cue} className="lantern-fall" aria-hidden>등불</div> : null}
         </div>
@@ -217,7 +221,16 @@ export default function PracticePage() {
             <p className="kicker">{mission.space ? "3D" : `STAGE ${mission.kicker}`}</p>
             <h2 style={{ margin: "4px 0 8px" }}>{mission.title}</h2>
             <p style={{ marginTop: 0, lineHeight: 1.6 }}>{mission.story}</p>
-            <button type="button" className="primary-btn" onClick={() => setStoryOpen(false)}>이 이야기로 시작</button>
+            <button
+              type="button"
+              className="primary-btn"
+              onClick={() => {
+                setStoryOpen(false);
+                if (mission.passers) setCue((value) => value + 1);
+              }}
+            >
+              시작
+            </button>
           </div>
         </div>
       ) : null}

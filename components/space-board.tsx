@@ -76,6 +76,7 @@ export function SpaceBoard({
   onLeft,
   onRight,
   onRotate,
+  required = [],
 }: {
   model: Model;
   analysis: Analysis | null;
@@ -88,6 +89,7 @@ export function SpaceBoard({
   onLeft: (hit: Hit) => void;
   onRight: (hit: Hit, clientX: number, clientY: number) => void;
   onRotate?: (nodeId: number) => void;
+  required?: [number, number][];
 }) {
   const [camera, setCamera] = useState<Camera>(HOME);
   const cameraRef = useRef(camera);
@@ -324,6 +326,25 @@ export function SpaceBoard({
         {pending && tool === "member" ? (
           <PendingLine pending={pending} camera={camera} />
         ) : null}
+        {required.map(([fromId, toId]) => {
+          const joined = model.members.some(
+            (member) => (member.i === fromId && member.j === toId) || (member.i === toId && member.j === fromId),
+          );
+          if (joined) return null;
+          const from = model.nodes.find((node) => node.id === fromId);
+          const to = model.nodes.find((node) => node.id === toId);
+          if (!from || !to) return null;
+          const a = project(from.x, from.y, from.z ?? 0, camera);
+          const b = project(to.x, to.y, to.z ?? 0, camera);
+          return (
+            <g key={`need-${fromId}-${toId}`}>
+              <line x1={a.sx} y1={a.sy} x2={b.sx} y2={b.sy} stroke="#d97706" strokeWidth="3" strokeDasharray="7 6" />
+              <text x={(a.sx + b.sx) / 2} y={(a.sy + b.sy) / 2 - 8} textAnchor="middle" fontSize="11" fontWeight="800" fill="#d97706">
+                이어야 함
+              </text>
+            </g>
+          );
+        })}
         {model.supports.map((support) => {
           const node = model.nodes.find((item) => item.id === support.nodeId);
           if (!node) return null;

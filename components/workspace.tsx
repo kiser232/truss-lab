@@ -51,6 +51,7 @@ export function Workspace({
   onSpace,
   cue = null,
   cueKey = 0,
+  required = [],
 }: {
   model: Model;
   onChange: (model: Model) => void;
@@ -69,8 +70,9 @@ export function Workspace({
   onMaterial?: (id: string) => void;
   space?: boolean;
   onSpace?: (next: boolean) => void;
-  cue?: "rock" | "walk" | "car" | "book" | null;
+  cue?: "rock" | "walk" | "car" | "book" | "kids" | null;
   cueKey?: number;
+  required?: [number, number][];
 }) {
   const [tool, setTool] = useState<Tool>(space ? "node" : tools.includes("member") ? "member" : tools[0]);
   const [innerMaterial, setInnerMaterial] = useState(
@@ -374,6 +376,7 @@ export function Workspace({
           onLeft={onLeft}
           onRight={onRight}
           onRotate={readOnly || lockSupports ? undefined : turnSupport}
+          required={required}
         />
       ) : (
         <TrussBoard
@@ -392,6 +395,7 @@ export function Workspace({
           onRotate={readOnly || lockSupports ? undefined : turnSupport}
           cue={cue}
           cueKey={cueKey}
+          required={required}
         />
       )}
 

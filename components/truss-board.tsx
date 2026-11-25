@@ -267,12 +267,37 @@ function StageCue({
   model,
   loads,
   cam,
+  path,
 }: {
-  cue: "rock" | "walk" | "car" | "book";
+  cue: "rock" | "walk" | "car" | "book" | "kids";
   model: Model;
   loads: Load[];
   cam: Camera;
+  path?: number[];
 }) {
+  if (cue === "kids" && path && path.length > 1) {
+    const points = path
+      .map((id) => model.nodes.find((node) => node.id === id))
+      .filter((node): node is NonNullable<typeof node> => Boolean(node))
+      .map((node) => toScreen(node.x, node.y, cam));
+    if (points.length > 1) {
+      const d = points.map((point, index) => `${index === 0 ? "M" : "L"}${point.sx},${point.sy - 30}`).join(" ");
+      const shirts = ["#2f6bff", "#e23b4a", "#16a34a"];
+      return (
+        <g>
+          {shirts.map((shirt, index) => (
+            <g key={shirt}>
+              <animateMotion dur="3.4s" begin={`${index * 0.55}s`} fill="freeze" path={d} />
+              <circle cy="-14" r="6" fill="#f6d7b8" />
+              <rect x="-7" y="-8" width="14" height="12" rx="3" fill={shirt} />
+              <line y1="4" x2="-7" y2="16" stroke="#172033" strokeWidth="2.5" />
+              <line y1="4" x2="7" y2="16" stroke="#172033" strokeWidth="2.5" />
+            </g>
+          ))}
+        </g>
+      );
+    }
+  }
   if (cue === "car" || cue === "walk") {
     const xs = model.nodes.map((node) => node.x);
     const y = Math.min(...model.nodes.map((node) => node.y));
@@ -341,6 +366,7 @@ export function TrussBoard({
   onRotate,
   cue = null,
   cueKey = 0,
+  required = [],
 }: {
   model: Model;
   loads?: Load[];
@@ -356,8 +382,9 @@ export function TrussBoard({
   onRight: (hit: Hit, clientX: number, clientY: number) => void;
   onMove: (point: WorldPoint | null) => void;
   onRotate?: (nodeId: number) => void;
-  cue?: "rock" | "walk" | "car" | "book" | null;
+  cue?: "rock" | "walk" | "car" | "book" | "kids" | null;
   cueKey?: number;
+  required?: [number, number][];
 }) {
   const drawnLoads = loads ?? model.loads;
   const focusing = Boolean(focusMemberIds && focusMemberIds.length > 0);
@@ -599,7 +626,35 @@ export function TrussBoard({
           const p = toScreen(node.x, node.y, cam);
           return <LoadArrow key={`l${load.nodeId}-${index}`} load={load} sx={p.sx} sy={p.sy} />;
         })}
-        {cue ? <StageCue key={cueKey} cue={cue} model={model} loads={drawnLoads} cam={cam} /> : null}
+        {required.map(([fromId, toId]) => {
+          const joined = model.members.some(
+            (member) => (member.i === fromId && member.j === toId) || (member.i === toId && member.j === fromId),
+          );
+          if (joined) return null;
+          const from = model.nodes.find((node) => node.id === fromId);
+          const to = model.nodes.find((node) => node.id === toId);
+          if (!from || !to) return null;
+          const a = toScreen(from.x, from.y, cam);
+          const b = toScreen(to.x, to.y, cam);
+          return (
+            <g key={`need-${fromId}-${toId}`}>
+              <line x1={a.sx} y1={a.sy} x2={b.sx} y2={b.sy} stroke="#d97706" strokeWidth="3" strokeDasharray="7 6" />
+              <text x={(a.sx + b.sx) / 2} y={(a.sy + b.sy) / 2 - 8} textAnchor="middle" fontSize="11" fontWeight="800" fill="#d97706">
+                이어야 함
+              </text>
+            </g>
+          );
+        })}
+        {cue ? (
+          <StageCue
+            key={cueKey}
+            cue={cue}
+            model={model}
+            loads={drawnLoads}
+            cam={cam}
+            path={required.length ? [required[0][0], ...required.map((pair) => pair[1])] : undefined}
+          />
+        ) : null}
 
         {tool === "node" && cursor ? (
           <circle
