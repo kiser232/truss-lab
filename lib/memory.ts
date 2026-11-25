@@ -11,6 +11,7 @@ export type WrongNote = {
   picked: string;
   answer: string;
   choices: string[];
+  model?: Model;
   at: number;
 };
 
@@ -100,7 +101,7 @@ export function rememberWrong(note: Omit<WrongNote, "at">) {
   writeJson(WRONGS, next);
 }
 
-export function gradeAnswer(input: { key: string; source: string; prompt: string; choices: { text: string; ok: boolean }[]; picked: number }) {
+export function gradeAnswer(input: { key: string; source: string; prompt: string; choices: { text: string; ok: boolean }[]; picked: number; model?: Model }) {
   const answer = input.choices.find((choice) => choice.ok)?.text ?? "";
   const picked = input.choices[input.picked]?.text ?? "";
   if (input.choices[input.picked]?.ok) forgetWrong(input.key);
@@ -112,6 +113,7 @@ export function gradeAnswer(input: { key: string; source: string; prompt: string
       picked,
       answer,
       choices: input.choices.map((choice) => choice.text),
+      model: input.model && input.model.nodes.length >= 2 ? structuredClone(input.model) : undefined,
     });
   }
 }

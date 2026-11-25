@@ -120,6 +120,7 @@ function JointRound({
       prompt: problem.prompt,
       choices: problem.choices,
       picked: choice,
+      model: problem.model,
     });
   }
 

@@ -273,6 +273,11 @@ export function jointProblems(): JointProblem[] {
   return shuffle(cached).map((problem) => ({ ...problem, choices: shuffle(problem.choices) }));
 }
 
+export function jointModel(id: string): Model | null {
+  cached ??= catalog();
+  return cached.find((problem) => problem.id === id)?.model ?? null;
+}
+
 export const CONCEPTS: { q: string; options: string[]; answer: number; note: string }[] = [
   { q: "부재가 당겨질 때", options: ["인장", "압축", "전단"], answer: 0, note: "+ 파랑" },
   { q: "부재가 눌릴 때", options: ["인장", "압축", "모멘트"], answer: 1, note: "− 적색" },

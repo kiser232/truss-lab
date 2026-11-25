@@ -212,6 +212,12 @@ export const EXAMS: Problem[] = [
   },
 ];
 
+export function examModel(id: string): Model | null {
+  const problem = EXAMS.find((item) => item.id === id);
+  if (!problem || problem.model.nodes.length < 2) return null;
+  return problem.model;
+}
+
 export function examsFor(year: number) {
   return EXAMS.filter((problem) => problem.year === year);
 }

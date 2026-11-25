@@ -41,6 +41,7 @@ export function ExamDesk({
       prompt: `${problem.year ? `${problem.year} ` : ""}${problem.prompt}`,
       choices,
       picked: index,
+      model: problem.model,
     });
     onGraded();
   }
