@@ -85,7 +85,9 @@ export function Workspace({
   }
   const [pending, setPending] = useState<number | null>(null);
   const [cursor, setCursor] = useState<{ x: number; y: number } | null>(null);
-  const [menu, setMenu] = useState<{ x: number; y: number; memberId: number | null; kind: "material" | "group" } | null>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number; memberId: number | null; nodeId: number | null; kind: "material" | "group" | "node" } | null>(null);
+  const [nodeCoord, setNodeCoord] = useState({ x: "", y: "", z: "" });
+  const [nodeNote, setNodeNote] = useState("");
   const [group, setGroup] = useState<number[]>([]);
   const [axisPick, setAxisPick] = useState(false);
   const moveBase = useRef<Model | null>(null);
@@ -274,12 +276,100 @@ export function Workspace({
 
   function onRight(hit: Hit, x: number, y: number) {
     if (readOnly) return;
-    const place = { x: Math.min(x, window.innerWidth - 220), y: Math.min(y, window.innerHeight - 180) };
-    if (inGroup(hit)) {
-      setMenu({ ...place, memberId: null, kind: "group" });
+    const place = { x: Math.min(x, window.innerWidth - 280), y: Math.min(y, window.innerHeight - 240) };
+    if (hit.nodeId) {
+      const node = model.nodes.find((item) => item.id === hit.nodeId);
+      if (!node) return;
+      setNodeCoord({ x: String(node.x), y: String(node.y), z: String(node.z ?? 0) });
+      setNodeNote("");
+      setMenu({ ...place, memberId: null, nodeId: node.id, kind: inGroup(hit) ? "group" : "node" });
       return;
     }
-    setMenu({ ...place, memberId: hit.memberId, kind: "material" });
+    if (inGroup(hit)) {
+      setMenu({ ...place, memberId: null, nodeId: null, kind: "group" });
+      return;
+    }
+    setMenu({ ...place, memberId: hit.memberId, nodeId: null, kind: "material" });
+  }
+
+  function shiftNodes(anchorId: number, dx: number, dy: number, dz: number) {
+    const moving = new Set(group.includes(anchorId) ? group : [anchorId]);
+    return model.nodes.map((node) => {
+      if (!moving.has(node.id) || lockedNodeIds.includes(node.id)) return node;
+      return {
+        ...node,
+        x: quantize(node.x + dx, 0.001),
+        y: quantize(node.y + dy, 0.001),
+        ...(space ? { z: quantize((node.z ?? 0) + dz, 0.001) } : {}),
+      };
+    });
+  }
+
+  function moveNodeTo(event: FormEvent) {
+    event.preventDefault();
+    if (!menu?.nodeId) return;
+    const anchor = model.nodes.find((node) => node.id === menu.nodeId);
+    if (!anchor) return;
+    const x = readCoord(nodeCoord.x);
+    const y = readCoord(nodeCoord.y);
+    const z = readCoord(nodeCoord.z);
+    if (x === null || y === null || (space && z === null)) {
+      setNodeNote(space ? "x, y, z를 숫자로 입력하세요." : "x, y를 숫자로 입력하세요.");
+      return;
+    }
+    if (lockedNodeIds.includes(anchor.id)) {
+      setNodeNote("고정된 절점은 옮길 수 없습니다.");
+      return;
+    }
+    const target = space
+      ? { x: clampNum(x, -16, 24), y: clampNum(y, 0, 16), z: clampNum(z ?? 0, -16, 16) }
+      : { x: clampNum(x, LIMIT.minX, LIMIT.maxX), y: clampNum(y, LIMIT.minY, LIMIT.maxY), z: anchor.z ?? 0 };
+    const nodes = shiftNodes(anchor.id, target.x - anchor.x, target.y - anchor.y, target.z - (anchor.z ?? 0));
+    onChange({ ...model, nodes });
+    const moved = nodes.find((node) => node.id === anchor.id);
+    if (moved && nodes.some((node) => node.id !== moved.id && sameSpot(node, moved))) {
+      setNodeNote("같은 좌표의 절점이 있습니다. 통합할 수 있습니다.");
+      return;
+    }
+    setMenu(null);
+  }
+
+  function mergeNode(nodeId: number) {
+    const anchor = model.nodes.find((node) => node.id === nodeId);
+    if (!anchor) return;
+    const drop = new Set(model.nodes.filter((node) => node.id !== nodeId && sameSpot(node, anchor)).map((node) => node.id));
+    if (drop.size === 0) return;
+    const remap = (id: number) => (drop.has(id) ? nodeId : id);
+    const seen = new Set<string>();
+    const members = [];
+    for (const member of model.members) {
+      const i = remap(member.i);
+      const j = remap(member.j);
+      if (i === j) continue;
+      const key = i < j ? `${i}-${j}` : `${j}-${i}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      members.push({ ...member, i, j });
+    }
+    let supports = model.supports.filter((support) => !drop.has(support.nodeId));
+    if (!supports.some((support) => support.nodeId === nodeId)) {
+      const extra = model.supports.find((support) => drop.has(support.nodeId));
+      if (extra && !lockSupports) supports = [...supports, { ...extra, nodeId }];
+    }
+    let loads = model.loads.filter((load) => !drop.has(load.nodeId));
+    if (!loads.some((load) => load.nodeId === nodeId)) {
+      const extra = model.loads.find((load) => drop.has(load.nodeId));
+      if (extra) loads = [...loads, { ...extra, nodeId }];
+    }
+    onChange({
+      nodes: model.nodes.filter((node) => !drop.has(node.id)),
+      members,
+      supports,
+      loads,
+    });
+    setGroup((current) => current.filter((id) => !drop.has(id)));
+    setSelected((current) => (current?.kind === "node" && drop.has(current.id) ? { kind: "node", id: nodeId } : current));
+    setMenu(null);
   }
 
   function moveGroup(dx: number, dy: number) {
@@ -393,6 +483,8 @@ export function Workspace({
   }
 
   const menuMember = model.members.find((member) => member.id === menu?.memberId);
+  const menuNode = model.nodes.find((node) => node.id === menu?.nodeId);
+  const canMerge = Boolean(menuNode && model.nodes.some((node) => node.id !== menuNode.id && sameSpot(node, menuNode)));
   const costRows = useMemo(() => {
     if (!showCost) return [];
     return model.members.map((member) => {
@@ -427,10 +519,10 @@ export function Workspace({
           <button
             type="button"
             className="material-chip"
-            onClick={(event) => setMenu({ x: event.clientX, y: event.clientY, memberId: null, kind: "material" })}
+            onClick={(event) => setMenu({ x: event.clientX, y: event.clientY, memberId: null, nodeId: null, kind: "material" })}
             onContextMenu={(event) => {
               event.preventDefault();
-              setMenu({ x: event.clientX, y: event.clientY, memberId: null, kind: "material" });
+              setMenu({ x: event.clientX, y: event.clientY, memberId: null, nodeId: null, kind: "material" });
             }}
           >
             <i className="swatch" style={{ background: material?.color ?? "#999" }} />
@@ -550,12 +642,23 @@ export function Workspace({
             {menu.kind === "group" ? (
               <>
                 <h4>그룹 {group.length}절점</h4>
-                <button type="button" className="mat" onClick={duplicateGroup}>
-                  <span><strong>복제</strong><small>복사본이 바로 그룹이 됩니다</small></span>
-                </button>
-                <button type="button" className="mat" onClick={() => { setAxisPick(true); setMenu(null); }}>
-                  <span><strong>좌우대칭</strong><small>다음에 누르는 세로선이 중심축입니다</small></span>
-                </button>
+                <button type="button" className="plain" onClick={duplicateGroup}>복제</button>
+                <button type="button" className="plain" onClick={() => { setAxisPick(true); setMenu(null); }}>좌우대칭</button>
+              </>
+            ) : null}
+            {menu.nodeId ? (
+              <>
+                <h4>절점 좌표</h4>
+                <form className="node-move" onSubmit={moveNodeTo}>
+                  <input aria-label="절점 x" inputMode="decimal" value={nodeCoord.x} onChange={(event) => setNodeCoord({ ...nodeCoord, x: event.target.value })} />
+                  <input aria-label="절점 y" inputMode="decimal" value={nodeCoord.y} onChange={(event) => setNodeCoord({ ...nodeCoord, y: event.target.value })} />
+                  {space ? <input aria-label="절점 z" inputMode="decimal" value={nodeCoord.z} onChange={(event) => setNodeCoord({ ...nodeCoord, z: event.target.value })} /> : null}
+                  <button type="submit">이동</button>
+                </form>
+                {nodeNote ? <p className="node-note">{nodeNote}</p> : null}
+                {canMerge && menu.nodeId ? (
+                  <button type="button" className="plain" onClick={() => mergeNode(menu.nodeId!)}>절점 통합</button>
+                ) : null}
               </>
             ) : null}
             {menu.kind === "material" ? <h4>{menuMember ? memberName(model.nodes, menuMember) : "다음 부재"} · 우클릭 자재</h4> : null}
@@ -585,6 +688,10 @@ export function Workspace({
       ) : null}
     </div>
   );
+}
+
+function sameSpot(a: { x: number; y: number; z?: number }, b: { x: number; y: number; z?: number }) {
+  return Math.hypot(a.x - b.x, a.y - b.y, (a.z ?? 0) - (b.z ?? 0)) < 0.02;
 }
 
 function readCoord(text: string) {

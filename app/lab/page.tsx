@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { analyze } from "@/lib/analyze";
 import { LAB_MATERIALS } from "@/lib/materials";
-import { bridgeTruss, copyModel, mirrorModel } from "@/lib/shape";
+import { bridgeTruss } from "@/lib/shape";
 import { TRIPOD } from "@/lib/space";
 import type { Model } from "@/lib/types";
 import { SolutionPanel } from "@/components/solution-panel";
@@ -33,7 +33,7 @@ export default function LabPage() {
   const [model, setModel] = useState<Model>(HOUSE);
   const [space, setSpace] = useState(false);
   const [step, setStep] = useState<number | null>(null);
-  const [kit, setKit] = useState({ panels: "4", spacing: "2", rise: "2", copy: "4" });
+  const [kit, setKit] = useState({ panels: "4", spacing: "2", rise: "2" });
   const analysis = useMemo(() => analyze(model), [model]);
   const focus = step !== null ? analysis.steps[step] : undefined;
 
@@ -54,12 +54,6 @@ export default function LabPage() {
           <button type="button" className="ghost" onClick={() => { setModel(EMPTY); setStep(null); }}>
             비우기
           </button>
-          <button type="button" className="ghost" onClick={() => { setSpace(false); setModel((current) => mirrorModel(current)); setStep(null); }}>
-            좌우 대칭
-          </button>
-          <button type="button" className="ghost" onClick={() => { setSpace(false); setModel((current) => copyModel(current, Number(kit.copy))); setStep(null); }}>
-            복사
-          </button>
         </div>
       </div>
       <div className="row-tools" style={{ marginBottom: 12 }}>
@@ -71,9 +65,6 @@ export default function LabPage() {
         </label>
         <label className="height-field">높이 m
           <input aria-label="트러스 높이" inputMode="decimal" value={kit.rise} onChange={(event) => setKit({ ...kit, rise: event.target.value })} />
-        </label>
-        <label className="height-field">복사 m
-          <input aria-label="복사 거리" inputMode="decimal" value={kit.copy} onChange={(event) => setKit({ ...kit, copy: event.target.value })} />
         </label>
         {([
           ["pratt", "프랫"],
