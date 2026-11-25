@@ -262,6 +262,68 @@ function arrowHead(x: number, y: number, dx: number, dy: number) {
   return `${x},${y} ${leftx},${lefty} ${rightx},${righty}`;
 }
 
+function StageCue({
+  cue,
+  model,
+  loads,
+  cam,
+}: {
+  cue: "rock" | "walk" | "car" | "book";
+  model: Model;
+  loads: Load[];
+  cam: Camera;
+}) {
+  if (cue === "car" || cue === "walk") {
+    const xs = model.nodes.map((node) => node.x);
+    const y = Math.min(...model.nodes.map((node) => node.y));
+    const from = toScreen(Math.min(...xs), y, cam);
+    const to = toScreen(Math.max(...xs), y, cam);
+    return (
+      <g>
+        <g>
+          <animateTransform attributeName="transform" type="translate" from={`${from.sx} ${from.sy - 28}`} to={`${to.sx} ${to.sy - 28}`} dur={cue === "car" ? "2.6s" : "2.2s"} fill="freeze" />
+          {cue === "car" ? (
+            <g>
+              <rect x="-22" y="-12" width="44" height="16" rx="4" fill="#172033" />
+              <circle cx="-12" cy="6" r="4" fill="#ef8a24" />
+              <circle cx="12" cy="6" r="4" fill="#ef8a24" />
+            </g>
+          ) : (
+            <g>
+              <circle cy="-16" r="6" fill="#2f6bff" />
+              <line y1="-10" y2="8" stroke="#172033" strokeWidth="3" />
+              <line y1="8" x2="-8" y2="18" stroke="#172033" strokeWidth="3" />
+              <line y1="8" x2="8" y2="18" stroke="#172033" strokeWidth="3" />
+            </g>
+          )}
+        </g>
+      </g>
+    );
+  }
+  const targets = (loads.length ? loads : model.loads)
+    .map((load) => model.nodes.find((node) => node.id === load.nodeId))
+    .filter((node): node is NonNullable<typeof node> => Boolean(node));
+  return (
+    <g>
+      {targets.map((node) => {
+        const point = toScreen(node.x, node.y, cam);
+        return (
+          <g key={node.id}>
+            <g>
+              <animateTransform attributeName="transform" type="translate" from={`${point.sx} ${point.sy - 90}`} to={`${point.sx} ${point.sy - 18}`} dur="0.9s" fill="freeze" />
+              {cue === "book" ? (
+                <rect x="-10" y="-14" width="20" height="14" rx="2" fill="#b45309" />
+              ) : (
+                <circle r="9" fill="#57534e" />
+              )}
+            </g>
+          </g>
+        );
+      })}
+    </g>
+  );
+}
+
 export function TrussBoard({
   model,
   loads,
@@ -277,6 +339,8 @@ export function TrussBoard({
   onRight,
   onMove,
   onRotate,
+  cue = null,
+  cueKey = 0,
 }: {
   model: Model;
   loads?: Load[];
@@ -292,6 +356,8 @@ export function TrussBoard({
   onRight: (hit: Hit, clientX: number, clientY: number) => void;
   onMove: (point: WorldPoint | null) => void;
   onRotate?: (nodeId: number) => void;
+  cue?: "rock" | "walk" | "car" | "book" | null;
+  cueKey?: number;
 }) {
   const drawnLoads = loads ?? model.loads;
   const focusing = Boolean(focusMemberIds && focusMemberIds.length > 0);
@@ -533,6 +599,7 @@ export function TrussBoard({
           const p = toScreen(node.x, node.y, cam);
           return <LoadArrow key={`l${load.nodeId}-${index}`} load={load} sx={p.sx} sy={p.sy} />;
         })}
+        {cue ? <StageCue key={cueKey} cue={cue} model={model} loads={drawnLoads} cam={cam} /> : null}
 
         {tool === "node" && cursor ? (
           <circle

@@ -48,7 +48,12 @@ function modelProblem(id: string, prompt: string, model: Model, memberId: number
   const extras = [-correct, correct / 2, -correct / 2, load, -load, correct + load, correct - load, correct * 1.5].filter(
     (value) => Math.abs(value - correct) > 0.2 && Math.abs(value) > 0.05,
   );
-  return { id, prompt: `${prompt} · ${force.name}`, model, choices: choicesFor(correct, extras) };
+  return {
+    id,
+    prompt: `${prompt}. 구하는 것은 부재 ${force.name}의 축력입니다. 양수는 인장, 음수는 압축입니다.`,
+    model,
+    choices: choicesFor(correct, extras),
+  };
 }
 
 function wood(id: number, i: number, j: number) {

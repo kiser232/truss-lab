@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { memberName } from "@/lib/analyze";
+import { splitColinearMembers } from "@/lib/shape";
 import { compressionAllow } from "@/lib/materials";
 import { rotateSupport } from "@/lib/support";
 import { quantize } from "@/lib/view";
@@ -48,6 +49,8 @@ export function Workspace({
   onMaterial,
   space = false,
   onSpace,
+  cue = null,
+  cueKey = 0,
 }: {
   model: Model;
   onChange: (model: Model) => void;
@@ -66,6 +69,8 @@ export function Workspace({
   onMaterial?: (id: string) => void;
   space?: boolean;
   onSpace?: (next: boolean) => void;
+  cue?: "rock" | "walk" | "car" | "book" | null;
+  cueKey?: number;
 }) {
   const [tool, setTool] = useState<Tool>(space ? "node" : tools.includes("member") ? "member" : tools[0]);
   const [innerMaterial, setInnerMaterial] = useState(
@@ -79,7 +84,7 @@ export function Workspace({
   const [pending, setPending] = useState<number | null>(null);
   const [cursor, setCursor] = useState<{ x: number; y: number } | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; memberId: number | null } | null>(null);
-  const [newton, setNewton] = useState(60);
+  const [loadInput, setLoadInput] = useState({ fx: "0", down: "60" });
   const [height, setHeight] = useState("2");
   const [selected, setSelected] = useState<{ kind: "node" | "member"; id: number } | null>(null);
   const activeTools = (space ? SPACE_TOOLS : tools).filter((item) => item !== "rollerX");
@@ -213,10 +218,8 @@ export function Workspace({
           (member.i === pending && member.j === hit.nodeId) || (member.j === pending && member.i === hit.nodeId),
       );
       if (!exists) {
-        onChange({
-          ...model,
-          members: [...model.members, { id: maxId(model) + 1, i: pending, j: hit.nodeId, materialId: activeMaterialId }],
-        });
+        const added = splitColinearMembers(model, pending, hit.nodeId, activeMaterialId);
+        if (added.length) onChange({ ...model, members: [...model.members, ...added] });
       }
       setPending(null);
       return;
@@ -233,11 +236,15 @@ export function Workspace({
       return;
     }
     if (tool === "load" && hit.nodeId && !lockSupports) {
+      const fx = Number(loadInput.fx);
+      const down = Number(loadInput.down);
+      if (!Number.isFinite(fx) || !Number.isFinite(down) || (Math.abs(fx) < 0.05 && Math.abs(down) < 0.05)) return;
+      const parts = [Math.abs(fx) >= 0.05 ? `${fx}→` : "", Math.abs(down) >= 0.05 ? `${down}↓` : ""].filter(Boolean);
       onChange({
         ...model,
         loads: [
           ...model.loads.filter((load) => load.nodeId !== hit.nodeId),
-          { nodeId: hit.nodeId, fx: 0, fy: -newton, label: `${newton}N` },
+          { nodeId: hit.nodeId, fx, fy: -down, label: parts.join(" ") },
         ],
       });
     }
@@ -345,12 +352,11 @@ export function Workspace({
             </form>
           ) : null}
           {tool === "load" ? (
-            <span className="row-tools">
-              {[20, 40, 60, 80, 100].map((value) => (
-                <button key={value} type="button" className={`tool ${newton === value ? "on" : ""}`} onClick={() => setNewton(value)}>
-                  {value}N
-                </button>
-              ))}
+            <span className="coord-field">
+              <span>하중</span>
+              <input aria-label="가로 하중" placeholder="가로" inputMode="decimal" value={loadInput.fx} onChange={(event) => setLoadInput({ ...loadInput, fx: event.target.value })} />
+              <input aria-label="아래 하중" placeholder="아래" inputMode="decimal" value={loadInput.down} onChange={(event) => setLoadInput({ ...loadInput, down: event.target.value })} />
+              <small>→ 아래가 +</small>
             </span>
           ) : null}
         </div>
@@ -384,6 +390,8 @@ export function Workspace({
           onRight={onRight}
           onMove={(point: WorldPoint | null) => setCursor(point ? { x: point.x, y: point.y } : null)}
           onRotate={readOnly || lockSupports ? undefined : turnSupport}
+          cue={cue}
+          cueKey={cueKey}
         />
       )}
 

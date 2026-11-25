@@ -353,12 +353,26 @@ function reactionStep(model: Model, loads: Load[], reactions: Map<number, { rx: 
   const lines: SolutionLine[] = [];
   for (const row of rows) {
     const text = equation(row.label, row.coefs, row.rhsKnown);
-    if (text) lines.push({ text, tone: "eq" });
+    if (text) {
+      lines.push({
+        text,
+        tone: "eq",
+        hint: row.label.startsWith("ΣM")
+          ? `${pivotLabel}를 기준으로 모멘트의 합이 0입니다. 힘에 그 점까지의 수직 거리를 곱합니다.`
+          : row.label === "ΣFx"
+            ? "구조 전체의 가로 방향 힘의 합이 0입니다. 여기서 수평 반력이 정해집니다."
+            : "구조 전체의 세로 방향 힘의 합이 0입니다. 여기서 수직 반력이 정해집니다.",
+      });
+    }
   }
   for (const comp of comps) {
     const value = reactions.get(comp.nodeId);
     const n = comp.axis === "x" ? value?.rx ?? 0 : value?.ry ?? 0;
-    lines.push({ text: `${comp.name}  ${signed(n)}`, tone: "result" });
+    lines.push({
+      text: `${comp.name}  ${signed(n)}`,
+      tone: "result",
+      hint: "위 평형식으로 구한 지점 반력입니다. 양수는 좌표의 +방향입니다.",
+    });
   }
   return { kind: "reaction", title: "반력", memberIds: [], lines };
 }
@@ -467,6 +481,15 @@ function jointMethod(
       }
 
       const lines: SolutionLine[] = [];
+      for (const unknown of unknowns) {
+        if (unknown.kind !== "member") continue;
+        const tilt = Math.round((Math.atan2(Math.abs(unknown.cy), Math.abs(unknown.cx)) * 180) / Math.PI);
+        lines.push({
+          text: `${unknown.name} 기울기 ${tilt}°`,
+          tone: "eq",
+          hint: `부재가 가로축과 ${tilt}°입니다. 0°는 수평, 90°는 수직입니다. 축력의 가로는 cos, 세로는 sin으로 나눕니다.`,
+        });
+      }
       const fx = equation(
         "ΣFx",
         unknowns.map((u) => ({ coef: coef(u, "x"), name: u.name })),
@@ -477,8 +500,8 @@ function jointMethod(
         unknowns.map((u) => ({ coef: coef(u, "y"), name: u.name })),
         Ky,
       );
-      if (fx) lines.push({ text: fx, tone: "eq" });
-      if (fy) lines.push({ text: fy, tone: "eq" });
+      if (fx) lines.push({ text: fx, tone: "eq", hint: "이 절점에서 가로 힘의 합이 0입니다. 기울어진 부재는 축력에 cosθ를 곱해 넣습니다." });
+      if (fy) lines.push({ text: fy, tone: "eq", hint: "이 절점에서 세로 힘의 합이 0입니다. 기울어진 부재는 축력에 sinθ를 곱하고, 하중과 반력도 함께 셉니다." });
 
       const drafts: { id: number; truth: number; name: string }[] = [];
       const reactionDrafts: { key: string; text: string }[] = [];
@@ -509,6 +532,12 @@ function jointMethod(
         lines.push({
           text: tone === "zero" ? `${draft.name}  0` : `${draft.name}  ${signed(draft.truth)}  ${word}`,
           tone,
+          hint:
+            tone === "tension"
+              ? "양수면 인장입니다. 부재가 절점을 끌어당기고, 절점은 부재를 밖으로 당깁니다."
+              : tone === "compression"
+                ? "음수면 압축입니다. 부재가 절점을 밀어내고, 절점은 부재를 안으로 밉니다."
+                : "축력이 0인 제로 부재입니다. 이 절점의 힘으로 그 부재가 불립니다.",
         });
       }
       steps.push({
@@ -591,6 +620,12 @@ function forceOf(
   const allowC = compressionAllow(material, length);
   const allowT = material.tension;
   const mode = Math.abs(axial) < 0.05 ? "zero" : axial > 0 ? "tension" : "compression";
+  const from = model.nodes.find((node) => node.id === member.i);
+  const to = model.nodes.find((node) => node.id === member.j);
+  const angle =
+    from && to
+      ? Math.round((Math.atan2(Math.abs(to.y - from.y), Math.abs(to.x - from.x)) * 180) / Math.PI)
+      : undefined;
   let ratio = 0;
   if (mode === "tension") ratio = allowT <= 0 ? 999 : axial / allowT;
   if (mode === "compression") ratio = allowC <= 0 ? 999 : -axial / allowC;
@@ -608,6 +643,7 @@ function forceOf(
     length,
     cost: length * material.costPerM,
     materialId: member.materialId,
+    angle,
   };
 }
 

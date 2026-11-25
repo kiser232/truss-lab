@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { analyze } from "@/lib/analyze";
 import { LAB_MATERIALS } from "@/lib/materials";
+import { bridgeTruss, copyModel, mirrorModel } from "@/lib/shape";
 import { TRIPOD } from "@/lib/space";
 import type { Model } from "@/lib/types";
 import { SolutionPanel } from "@/components/solution-panel";
@@ -32,6 +33,7 @@ export default function LabPage() {
   const [model, setModel] = useState<Model>(HOUSE);
   const [space, setSpace] = useState(false);
   const [step, setStep] = useState<number | null>(null);
+  const [kit, setKit] = useState({ panels: "4", spacing: "2", rise: "2", copy: "4" });
   const analysis = useMemo(() => analyze(model), [model]);
   const focus = step !== null ? analysis.steps[step] : undefined;
 
@@ -52,7 +54,45 @@ export default function LabPage() {
           <button type="button" className="ghost" onClick={() => { setModel(EMPTY); setStep(null); }}>
             비우기
           </button>
+          <button type="button" className="ghost" onClick={() => { setSpace(false); setModel((current) => mirrorModel(current)); setStep(null); }}>
+            좌우 대칭
+          </button>
+          <button type="button" className="ghost" onClick={() => { setSpace(false); setModel((current) => copyModel(current, Number(kit.copy))); setStep(null); }}>
+            복사
+          </button>
         </div>
+      </div>
+      <div className="row-tools" style={{ marginBottom: 12 }}>
+        <label className="height-field">칸
+          <input aria-label="칸 수" inputMode="numeric" value={kit.panels} onChange={(event) => setKit({ ...kit, panels: event.target.value })} />
+        </label>
+        <label className="height-field">간격 m
+          <input aria-label="부재 간격" inputMode="decimal" value={kit.spacing} onChange={(event) => setKit({ ...kit, spacing: event.target.value })} />
+        </label>
+        <label className="height-field">높이 m
+          <input aria-label="트러스 높이" inputMode="decimal" value={kit.rise} onChange={(event) => setKit({ ...kit, rise: event.target.value })} />
+        </label>
+        <label className="height-field">복사 m
+          <input aria-label="복사 거리" inputMode="decimal" value={kit.copy} onChange={(event) => setKit({ ...kit, copy: event.target.value })} />
+        </label>
+        {([
+          ["pratt", "프랫"],
+          ["howe", "하우"],
+          ["warren", "와렌"],
+        ] as const).map(([kind, label]) => (
+          <button
+            key={kind}
+            type="button"
+            className="ghost"
+            onClick={() => {
+              setSpace(false);
+              setModel(bridgeTruss(kind, Number(kit.panels), Number(kit.spacing), Number(kit.rise)));
+              setStep(null);
+            }}
+          >
+            {label}
+          </button>
+        ))}
       </div>
       <div className="lab-grid">
         <Workspace
@@ -82,7 +122,7 @@ export default function LabPage() {
         @media (max-width: 980px) { .lab-grid { grid-template-columns: 1fr; } }
       `}</style>
       <p className="note" style={{ marginTop: 8 }}>
-        좌표에 x, y를 넣고 넣기를 누르면 절점이 생깁니다. 핀이나 롤러에 커서를 올리면 회전이 나오고, 롤러는 한 번 돌릴 때마다 바닥 롤러와 가로 롤러가 바뀝니다. 우클릭으로 자재. + 인장 · − 압축.
+        좌표에 x, y를 넣고 넣기를 누르면 절점이 생깁니다. 직선 위의 절점을 가로질러 부재를 이으면 AB, BC처럼 나뉩니다. 하중은 가로·아래 칸에 숫자를 넣고 절점을 누릅니다. 프랫·하우·와렌은 칸, 간격, 높이로 만듭니다. 풀이 줄에 커서를 올리면 그 식의 뜻이 나옵니다.
       </p>
     </main>
   );

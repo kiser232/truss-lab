@@ -8,6 +8,7 @@ export type Mission = {
   scene: "valley" | "road" | "cliff" | "desk";
   hint: string;
   story: string;
+  space?: boolean;
   nodes: Model["nodes"];
   fixedNodeIds: number[];
   supports: Model["supports"];
@@ -31,7 +32,7 @@ export const MISSIONS: Mission[] = [
     budget: 88,
     scene: "valley",
     hint: "꼭짓점 ↑ · 빗재 압 · 수직·하현재 인",
-    story: "8m 계곡. 왼쪽 핀, 오른쪽 롤러. 가운데 60N.",
+    story: "아침 안개가 낀 계곡이다. 마을 아이들은 8m 틈을 건너야 학교에 간다. 왼쪽 바위는 핀처럼 고정되고, 오른쪽은 롤러처럼 미끄러진다. 가운데 발판에 60N의 짐이 내려앉는다. 삼각형을 세워 그 짐을 받아 내라.",
     nodes: [
       { id: 1, x: 2, y: 0 },
       { id: 2, x: 10, y: 0 },
@@ -67,7 +68,7 @@ export const MISSIONS: Mission[] = [
     budget: 150,
     scene: "valley",
     hint: "하중마다 삼각형 · 수직 인 · 바깥 빗재 압",
-    story: "같은 계곡. 4m, 8m 지점에 55N씩.",
+    story: "다리가 길어지자 상인 둘이 동시에 건너온다. 4m와 8m 지점에 각각 55N. 한 칸짜리 삼각형으로는 둘을 동시에 받을 수 없다. 하중마다 작은 삼각형을 만들어 계곡을 건너게 하라.",
     nodes: [
       { id: 1, x: 2, y: 0 },
       { id: 2, x: 10, y: 0 },
@@ -116,7 +117,7 @@ export const MISSIONS: Mission[] = [
     budget: 150,
     scene: "valley",
     hint: "큰 하중 쪽만 비싼 압축재",
-    story: "왼쪽 90N, 오른쪽 30N. 모양은 같아도 힘은 다름.",
+    story: "왼쪽에는 돌수레 90N, 오른쪽에는 가벼운 짐 30N이 선다. 모양은 대칭처럼 보여도 힘은 한쪽으로 기운다. 무거운 쪽의 압축 부재만 단단한 재료로 바꿔 예산을 지켜라.",
     nodes: [
       { id: 1, x: 2, y: 0 },
       { id: 2, x: 10, y: 0 },
@@ -165,7 +166,7 @@ export const MISSIONS: Mission[] = [
     budget: 176,
     scene: "road",
     hint: "부호가 바뀌면 케이블 금지",
-    story: "0–8m 도로. 80N 자동차가 지나감.",
+    story: "포장된 도로 0m에서 8m까지, 80N짜리 자동차가 천천히 지나간다. 차가 있는 자리마다 부재의 힘이 바뀐다. 인장과 압축이 뒤집히는 자리에는 케이블을 두면 안 된다.",
     nodes: [
       { id: 1, x: 0, y: 0 },
       { id: 2, x: 2, y: 0 },
@@ -215,7 +216,7 @@ export const MISSIONS: Mission[] = [
     budget: 76,
     scene: "cliff",
     hint: "빗재 인 · 바닥 압 · 케이블을 바닥에 두지 말 것",
-    story: "벽 핀 + 수평 롤러. 끝 70N. 내민 길이 4m.",
+    story: "절벽 위 전망대. 한 사람이 난간 끝으로 걸어가 70N으로 선다. 벽은 핀과 가로 롤러가 붙잡고, 발판은 4m를 내민다. 사람을 떨어뜨리지 않을 팔과 바닥을 만들어라.",
     nodes: [
       { id: 1, x: 0, y: 0 },
       { id: 2, x: 0, y: 3 },
@@ -248,7 +249,7 @@ export const MISSIONS: Mission[] = [
     budget: 120,
     scene: "valley",
     hint: "인장 케이블 · 압축 콘크리트",
-    story: "가운데 100N. 강관만 쓰면 예산이 터짐.",
+    story: "창고 지붕 한가운데 100N의 곡식 자루가 매달린다. 모든 부재를 강관으로 바꾸면 예산이 하루 만에 바닥난다. 당기는 곳에는 케이블, 누르는 곳에는 콘크리트를 배치하라.",
     nodes: [
       { id: 1, x: 2, y: 0 },
       { id: 2, x: 10, y: 0 },
@@ -284,7 +285,7 @@ export const MISSIONS: Mission[] = [
     budget: 188,
     scene: "road",
     hint: "바뀌는 부재는 강관 · 항상 인장은 케이블",
-    story: "트럭 120N이 지나고, 가운데 돌 50N이 계속 있음.",
+    story: "축제 날, 120N 트럭이 다리를 지나고 가운데에는 50N 돌무더기가 그대로 남아 있다. 차가 움직이는 동안 부호가 바뀌는 부재와, 항상 당겨지기만 하는 부재를 구분하라.",
     nodes: [
       { id: 1, x: 0, y: 0 },
       { id: 2, x: 2, y: 0 },
@@ -334,7 +335,7 @@ export const MISSIONS: Mission[] = [
     budget: 120,
     scene: "desk",
     hint: "압축재는 짧게 · 당기는 부재는 종이",
-    story: "6m 책상. 종이·스파게티·수수깡만. 점수 = 책 무게 ÷ 재료비.",
+    story: "경진대회 책상 위 6m. 쓸 수 있는 재료는 종이, 스파게티, 수수깡뿐이다. 책이 쌓일수록 점수는 책 무게를 재료비로 나눈 값이 된다. 짧게 눌러 버티고, 길게 당겨 올려라.",
     nodes: [
       { id: 1, x: 3, y: 0 },
       { id: 2, x: 9, y: 0 },
@@ -372,6 +373,50 @@ export const MISSIONS: Mission[] = [
       ],
       supports: [pin(1), rollerY(2)],
       loads: [],
+    },
+  },
+  {
+    id: 9,
+    title: "등불",
+    kicker: "9",
+    budget: 120,
+    scene: "desk",
+    space: true,
+    hint: "세 발이 꼭짓점을 받친다 · 강관",
+    story: "밤 축제. 광장 한가운데 등불 60N을 공중에 매달아야 한다. 바닥의 세 점은 볼 지점이고, 등불은 그 위 2m에 있다. 평면이 아니라 공간으로 세 부재를 올려 등불이 흔들리지 않게 하라.",
+    nodes: [
+      { id: 1, x: 2, y: 0, z: 0 },
+      { id: 2, x: -1, y: 0, z: 1.7 },
+      { id: 3, x: -1, y: 0, z: -1.7 },
+      { id: 4, x: 0, y: 2, z: 0 },
+    ],
+    fixedNodeIds: [1, 2, 3, 4],
+    supports: [
+      { nodeId: 1, type: "ball" },
+      { nodeId: 2, type: "ball" },
+      { nodeId: 3, type: "ball" },
+    ],
+    staticLoads: [{ nodeId: 4, fx: 0, fy: -60, label: "60N" }],
+    car: null,
+    materials: "lab",
+    example: {
+      nodes: [
+        { id: 1, x: 2, y: 0, z: 0 },
+        { id: 2, x: -1, y: 0, z: 1.7 },
+        { id: 3, x: -1, y: 0, z: -1.7 },
+        { id: 4, x: 0, y: 2, z: 0 },
+      ],
+      members: [
+        { id: 1, i: 1, j: 4, materialId: "tube" },
+        { id: 2, i: 2, j: 4, materialId: "tube" },
+        { id: 3, i: 3, j: 4, materialId: "tube" },
+      ],
+      supports: [
+        { nodeId: 1, type: "ball" },
+        { nodeId: 2, type: "ball" },
+        { nodeId: 3, type: "ball" },
+      ],
+      loads: [{ nodeId: 4, fx: 0, fy: -60, label: "60N" }],
     },
   },
 ];

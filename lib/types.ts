@@ -49,11 +49,14 @@ export type MemberForce = {
   length: number;
   cost: number;
   materialId: string;
+  /** 가로축과 이루는 기울기. 0°는 수평, 90°는 수직. */
+  angle?: number;
 };
 
 export type SolutionLine = {
   text: string;
   tone?: "eq" | "tension" | "compression" | "zero" | "result";
+  hint?: string;
 };
 
 export type SolutionStep = {

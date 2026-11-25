@@ -19,8 +19,17 @@ function readBest() {
   return Number(window.localStorage.getItem("truss-lab-best")) || 0;
 }
 
+function cueOf(mission: (typeof MISSIONS)[number]) {
+  if (mission.contest) return "book" as const;
+  if (mission.car) return "car" as const;
+  if (mission.scene === "cliff") return "walk" as const;
+  return "rock" as const;
+}
+
 export default function PracticePage() {
-  const [stageId, setStageId] = useState(1);
+  const [stageId, setStageId] = useState<number | null>(null);
+  const [storyOpen, setStoryOpen] = useState(false);
+  const [cue, setCue] = useState(0);
   const [designs, setDesigns] = useState<Record<number, Model>>({});
   const [grades, setGrades] = useState<Record<number, Grade | null>>({});
   const [tab, setTab] = useState<"mine" | "example">("mine");
@@ -28,19 +37,20 @@ export default function PracticePage() {
   const [step, setStep] = useState<number | null>(null);
   const best = useSyncExternalStore(subscribeBest, readBest, () => 0);
   const [brush, setBrush] = useState("wood");
-  const mission = MISSIONS.find((item) => item.id === stageId) ?? MISSIONS[0];
-  const materials = mission.materials === "contest" ? CONTEST_MATERIALS : LAB_MATERIALS;
-  const mine = designs[mission.id] ?? blankMissionModel(mission);
-  const example = useMemo(() => exampleModel(mission, 3), [mission]);
-  const exampleGrade = useMemo(() => gradeMission(mission, example, mission.contest ? 3 : 0), [mission, example]);
-  const mineGrade = grades[mission.id] ?? null;
+  const mission = MISSIONS.find((item) => item.id === stageId) ?? null;
+  const active = mission ?? MISSIONS[0];
+  const materials = active.materials === "contest" ? CONTEST_MATERIALS : LAB_MATERIALS;
+  const mine = designs[active.id] ?? blankMissionModel(active);
+  const example = useMemo(() => exampleModel(active, 3), [active]);
+  const exampleGrade = useMemo(() => gradeMission(active, example, active.contest ? 3 : 0), [active, example]);
+  const mineGrade = grades[active.id] ?? null;
   const shown = tab === "example" ? example : mine;
   const grade = tab === "example" ? exampleGrade : mineGrade;
   const analysis = grade?.governing ?? null;
   const focus = step !== null && analysis ? analysis.steps[step] : undefined;
   const cost = modelCost(shown);
-  const bookLoads = mission.contest
-    ? [{ nodeId: mission.bookNodeId ?? 3, fx: 0, fy: -20 * (tab === "example" ? 3 : books), label: `${tab === "example" ? 3 : books}권` }]
+  const bookLoads = active.contest
+    ? [{ nodeId: active.bookNodeId ?? 3, fx: 0, fy: -20 * (tab === "example" ? 3 : books), label: `${tab === "example" ? 3 : books}권` }]
     : undefined;
 
   function selectStage(id: number) {
@@ -49,17 +59,40 @@ export default function PracticePage() {
     setStep(null);
     setTab("mine");
     setBrush(next.materials === "contest" ? "paper" : "wood");
+    setStoryOpen(true);
+    setCue(0);
   }
 
   function test() {
+    if (!mission) return;
     const result = gradeMission(mission, mine, books);
     setGrades((prev) => ({ ...prev, [mission.id]: result }));
     setTab("mine");
     setStep(null);
+    setCue((value) => value + 1);
     if (mission.contest && result.passed && result.score > best) {
       window.localStorage.setItem("truss-lab-best", String(result.score));
       window.dispatchEvent(new Event("truss-best"));
     }
+  }
+
+  if (!mission) {
+    return (
+      <main className="work">
+        <p className="kicker">EXPLORE</p>
+        <h1 style={{ margin: "4px 0 8px", fontSize: 28, letterSpacing: "-0.04em" }}>레벨을 고르세요</h1>
+        <p className="note" style={{ marginTop: 0 }}>단계를 누르면 그 판의 이야기가 열립니다. 경진대회는 다른 색입니다.</p>
+        <div className="level-grid">
+          {MISSIONS.map((item) => (
+            <button key={item.id} type="button" className={`level-card ${item.contest ? "contest" : ""}`} onClick={() => selectStage(item.id)}>
+              <span>{item.space ? "3D" : item.contest ? "대회" : `STAGE ${item.kicker}`}</span>
+              <strong>{item.title}</strong>
+              <small>{item.hint}</small>
+            </button>
+          ))}
+        </div>
+      </main>
+    );
   }
 
   return (
@@ -71,7 +104,7 @@ export default function PracticePage() {
         </div>
         <div className="row-tools">
           {MISSIONS.map((item) => (
-            <button key={item.id} type="button" className={`stage-chip ${item.id === mission.id ? "on" : ""}`} onClick={() => selectStage(item.id)}>
+            <button key={item.id} type="button" className={`stage-chip ${item.contest ? "contest" : ""} ${item.id === mission.id ? "on" : ""}`} onClick={() => selectStage(item.id)}>
               {item.kicker} {item.title}
             </button>
           ))}
@@ -135,6 +168,8 @@ export default function PracticePage() {
           ) : null}
         </aside>
 
+        <div style={{ position: "relative" }}>
+          <button type="button" className="story-replay" onClick={() => setStoryOpen(true)}>이야기</button>
         <Workspace
           key={`${mission.id}-${tab}`}
           model={shown}
@@ -157,7 +192,12 @@ export default function PracticePage() {
           showCost
           materialId={brush}
           onMaterial={setBrush}
+          space={Boolean(mission.space)}
+          cue={cue > 0 && !mission.space ? cueOf(mission) : null}
+          cueKey={cue}
         />
+        {mission.space && cue > 0 ? <div key={cue} className="lantern-fall" aria-hidden>등불</div> : null}
+        </div>
 
         <SolutionPanel
           analysis={tab === "mine" && !mineGrade ? null : analysis}
@@ -171,6 +211,17 @@ export default function PracticePage() {
           placeholder="시험하면 축력과 절점 순서가 나옵니다."
         />
       </div>
+      {storyOpen ? (
+        <div className="story-back" onClick={() => setStoryOpen(false)}>
+          <div className="story-card" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true">
+            <p className="kicker">{mission.space ? "3D" : `STAGE ${mission.kicker}`}</p>
+            <h2 style={{ margin: "4px 0 8px" }}>{mission.title}</h2>
+            <p style={{ marginTop: 0, lineHeight: 1.6 }}>{mission.story}</p>
+            <button type="button" className="primary-btn" onClick={() => setStoryOpen(false)}>이 이야기로 시작</button>
+          </div>
+        </div>
+      ) : null}
+      {mission.space && cue > 0 ? <p className="note">등불이 꼭짓점으로 내려앉습니다. 세 부재가 그 무게를 나눠 갖습니다.</p> : null}
       <style>{`
         .practice-grid { display: grid; grid-template-columns: 270px minmax(0, 1fr) 320px; gap: 12px; align-items: start; }
         @media (max-width: 1100px) { .practice-grid { grid-template-columns: 1fr; } }

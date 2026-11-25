@@ -95,8 +95,9 @@ export function SolutionPanel({
       ) : (
         <div className="chips">
           {analysis.forces.map((force) => (
-            <span key={force.memberId} className={`chip ${force.mode}`}>
+            <span key={force.memberId} className={`chip ${force.mode}`} title={typeof force.angle === "number" ? `가로축과의 기울기 ${force.angle}°. 0°는 수평, 90°는 수직입니다.` : undefined}>
               {force.name} {force.mode === "zero" ? "0" : signed(force.axial)} {word(force.mode)}
+              {typeof force.angle === "number" ? ` · ${force.angle}°` : ""}
             </span>
           ))}
         </div>
@@ -133,12 +134,28 @@ function nodeTag(analysis: Analysis, nodeId: number) {
   return index >= 0 ? letter(index) : `#${nodeId}`;
 }
 
+function stepHint(step: SolutionStep) {
+  if (step.kind === "reaction") return "구조 전체를 한 덩어리로 보고, 부재로 들어가기 전에 지점 반력을 구합니다.";
+  if (step.kind === "joint") return "미지 부재가 두 개 이하인 절점입니다. 가로 힘의 합과 세로 힘의 합이 각각 0입니다.";
+  return "식으로 하나씩 정해지지 않아, 부재 강성 EA로 힘을 나눈 결과입니다.";
+}
+
+function lineHint(text: string, tone?: string, hint?: string) {
+  if (hint) return hint;
+  if (tone === "tension") return "양수는 인장입니다. 부재가 절점을 당깁니다.";
+  if (tone === "compression") return "음수는 압축입니다. 부재가 절점을 밉니다.";
+  if (tone === "zero") return "이 부재에는 축력이 없습니다.";
+  if (tone === "result") return "바로 위 식에서 구한 값입니다.";
+  if (text.includes("Σ")) return "힘 또는 모멘트의 합이 0이라는 평형 식입니다.";
+  return "이 계산 단계의 식입니다.";
+}
+
 function StepButton({ step, on, onClick }: { step: SolutionStep; on: boolean; onClick: () => void }) {
   return (
     <button type="button" className={`step ${on ? "on" : ""}`} onClick={onClick}>
-      <div className="title">{step.title}</div>
+      <div className="title" title={stepHint(step)}>{step.title}</div>
       {step.lines.map((line, index) => (
-        <div key={index} className={`eq ${line.tone ?? ""}`}>
+        <div key={index} className={`eq ${line.tone ?? ""}`} title={lineHint(line.text, line.tone, line.hint)}>
           {line.text}
         </div>
       ))}
